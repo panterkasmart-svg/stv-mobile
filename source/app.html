@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="STV">
+<meta name="theme-color" content="#16233a">
+<title>STV рефлектограммы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: an instrument screen in your pocket — trace on top, Viavi-style event table below, tabs at the bottom edge of the work area. */
+:root {
+  --ink: #16233a;        /* text, instrument navy */
+  --paper: #f3f5f8;      /* page */
+  --panel: #ffffff;      /* cards */
+  --line: #d5dbe5;       /* rules */
+  --muted: #5b677a;      /* secondary text */
+  --accent: #3b2fb0;     /* Viavi-like indigo: controls, selection */
+  --trace: #1f5fbf;      /* trace line */
+  --pass: #2e9e48; --warn: #c99400; --fail: #d93025; --nodata: #9e9e9e;
+  --pass-bg: #e3f3e7; --warn-bg: #fbf1cf; --fail-bg: #fbe0dd; --nodata-bg: #ececec;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --gutter: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #e6ebf4; --paper: #0f1622; --panel: #172133; --line: #2b3850; --muted: #9aa7bc;
+    --accent: #9d93ff; --trace: #6fa8ff;
+    --pass-bg: #173a24; --warn-bg: #3d3212; --fail-bg: #45201d; --nodata-bg: #2a2f38;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #e6ebf4; --paper: #0f1622; --panel: #172133; --line: #2b3850; --muted: #9aa7bc;
+  --accent: #9d93ff; --trace: #6fa8ff;
+  --pass-bg: #173a24; --warn-bg: #3d3212; --fail-bg: #45201d; --nodata-bg: #2a2f38;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.4 var(--font-body);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-text-size-adjust: 100%; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+header.top { display: flex; align-items: center; gap: 10px; padding: 10px var(--gutter); background: var(--ink); color: var(--paper); }
+:root[data-theme="dark"] header.top { background: #0a0f18; color: var(--ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) header.top { background: #0a0f18; color: var(--ink); } }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .02em; }
+header.top .sub { font-size: 12px; opacity: .75; }
+header.top .grow { flex: 1; min-width: 0; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 12px; min-height: 40px; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.btn.small { min-height: 34px; padding: 4px 10px; font-size: 14px; }
+.btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+label.filebtn { display: inline-flex; align-items: center; gap: 6px; }
+label.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.chips { display: flex; gap: 8px; padding: 8px var(--gutter); overflow-x: auto; background: var(--panel); border-bottom: 1px solid var(--line); }
+.chip { flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--paper); white-space: nowrap; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
+.chip .x { opacity: .7; padding: 0 2px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.banner { margin: 8px var(--gutter) 0; padding: 10px 12px; border-radius: 10px; background: var(--fail-bg); border-left: 6px solid var(--fail); font-size: 14px; }
+.banner.info { background: var(--nodata-bg); border-left-color: var(--accent); }
+.plotwrap { position: relative; background: var(--panel); border-bottom: 1px solid var(--line); }
+canvas#plot { display: block; width: 100%; height: 42vh; min-height: 230px; max-height: 460px; touch-action: none; }
+.plotbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px var(--gutter) 8px; }
+.readout { font-size: 13px; color: var(--muted); padding: 0 var(--gutter) 8px; }
+.readout b { color: var(--ink); font-weight: 600; }
+nav.tabs { display: flex; position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); }
+nav.tabs button { flex: 1; border: 0; background: none; padding: 12px 4px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+main { padding: 12px var(--gutter) 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+main > div { min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.card h2 { font-size: 15px; margin: 0 0 8px; text-wrap: balance; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.kv { display: grid; gap: 2px; }
+.kv .k { font-size: 12px; color: var(--muted); }
+.kv .v { font-size: 17px; font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 600; }
+.st-pass { background: var(--pass-bg); } .st-warn { background: var(--warn-bg); } .st-fail { background: var(--fail-bg); } .st-no_data { background: var(--nodata-bg); }
+.stripe-pass { border-left: 5px solid var(--pass); } .stripe-warn { border-left: 5px solid var(--warn); } .stripe-fail { border-left: 5px solid var(--fail); } .stripe-no_data { border-left: 5px solid var(--nodata); }
+.check { font-size: 13px; border-radius: 8px; padding: 8px 10px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.toggles label { display: inline-flex; gap: 8px; align-items: center; min-height: 36px; }
+input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+.tablewrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table.ev { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+table.ev th { text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--panel); }
+table.ev th:first-child, table.ev td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel); }
+table.ev td { text-align: right; padding: 9px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.ev tr.section td { color: var(--muted); font-size: 13px; background: var(--paper); }
+table.ev tr.section td:first-child { background: var(--paper); }
+table.ev tr.event { cursor: pointer; }
+table.ev tr.sel td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+table.ev td.c-pass { background: var(--pass-bg); } table.ev td.c-warn { background: var(--warn-bg); } table.ev td.c-fail { background: var(--fail-bg); } table.ev td.c-no_data { background: var(--nodata-bg); }
+.repair { font-weight: 600; }
+.detail { display: grid; gap: 6px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; align-items: center; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 13px; color: var(--muted); }
+.field input, .field select { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--paper); min-height: 40px; width: 100%; }
+table.lim { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.lim th { font-size: 12px; color: var(--muted); text-align: left; padding: 6px 4px; font-weight: 600; }
+table.lim td { padding: 4px; }
+table.lim input { width: 100%; min-width: 64px; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--paper); font-family: var(--font-num); }
+.err { color: var(--fail); font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
+.params { display: grid; grid-template-columns: minmax(120px, 40%) 1fr; gap: 6px 12px; font-size: 14px; }
+.params div:nth-child(odd) { color: var(--muted); }
+footer { padding: 0 var(--gutter) 24px; color: var(--muted); font-size: 12px; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="grow">
+    <h1>STV рефлектограммы</h1>
+    <div class="sub" id="subtitle">Просмотр SOR без изменения файлов</div>
+  </div>
+  <label class="btn primary filebtn" for="fileinput">Открыть SOR<input id="fileinput" type="file" multiple></label>
+</header>
+<div class="chips" id="chips" role="toolbar" aria-label="Открытые трассы"></div>
+<div id="banners"></div>
+
+<section class="plotwrap" aria-label="График рефлектограммы">
+  <canvas id="plot"></canvas>
+  <div class="plotbar">
+    <button class="btn small" id="zoomOut" aria-label="Уменьшить">−</button>
+    <button class="btn small" id="zoomIn" aria-label="Увеличить">+</button>
+    <button class="btn small" id="zoomAll">Вся трасса</button>
+    <span class="muted" style="margin-left:auto">Касание ставит</span>
+    <button class="btn small" id="curA" aria-pressed="true">курсор A</button>
+    <button class="btn small" id="curB" aria-pressed="false">курсор B</button>
+  </div>
+  <div class="readout num" id="readout"></div>
+</section>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" id="tab-events" aria-selected="true" aria-controls="view-events">События</button>
+  <button role="tab" id="tab-span" aria-selected="false" aria-controls="view-span">Span</button>
+  <button role="tab" id="tab-limits" aria-selected="false" aria-controls="view-limits">Пороги</button>
+  <button role="tab" id="tab-info" aria-selected="false" aria-controls="view-info">Файл</button>
+</nav>
+
+<main>
+  <div id="view-events" role="tabpanel">
+    <div class="card" id="summary"></div>
+    <div class="toggles" style="margin:12px 0">
+      <label><input type="checkbox" id="optSections" checked> Участки между событиями</label>
+      <label><input type="checkbox" id="optRepair"> Только «требует проверки»</label>
+    </div>
+    <div class="tablewrap"><table class="ev num" id="evtable"></table></div>
+    <div class="card detail" id="detail" style="margin-top:12px" hidden></div>
+  </div>
+
+  <div id="view-span" role="tabpanel" hidden>
+    <div class="card">
+      <h2>Граница измеряемого участка</h2>
+      <div class="grid2">
+        <label><input type="checkbox" id="spBeginOn"> Set Span Begin</label>
+        <select id="spBeginMode" aria-label="Режим начала"><option value="index">Index (номер события)</option><option value="length">Length (длина шнура, м)</option></select>
+        <div class="field"><label for="spBeginVal">Значение начала</label><input id="spBeginVal" inputmode="decimal" value="1"></div>
+        <div></div>
+        <label><input type="checkbox" id="spEndOn"> Set Span End</label>
+        <select id="spEndMode" aria-label="Режим конца"><option value="reverse_index">Reverse Index (1 = конец волокна)</option><option value="reverse_length">Reverse Length (приёмный шнур, м)</option></select>
+        <div class="field"><label for="spEndVal">Значение конца</label><input id="spEndVal" inputmode="decimal" value="1"></div>
+        <div></div>
+      </div>
+      <div class="toggles" style="margin-top:8px">
+        <label><input type="checkbox" id="spIncB"> Include Begin loss</label>
+        <label><input type="checkbox" id="spIncE"> Include End loss</label>
+        <label><input type="checkbox" id="spEst"> Показывать «≈ оценку», если не сходится с прибором</label>
+      </div>
+    </div>
+    <div class="card" id="spanResult" style="margin-top:12px"></div>
+  </div>
+
+  <div id="view-limits" role="tabpanel" hidden>
+    <div class="card">
+      <h2>Пороги Pass/Fail</h2>
+      <div class="toggles">
+        <label><input type="checkbox" id="optPF" checked> Показывать Pass/Fail и цвета</label>
+        <label><input type="checkbox" id="optChecks" checked> Применять проверки</label>
+      </div>
+      <p class="muted">Значения задаёте вы; заводских норм в программе нет. Значение, равное порогу, допустимо. Пороги хранятся только на этом устройстве.</p>
+      <div class="chips" id="wlchips" style="padding:8px 0;border:0;background:none"></div>
+      <table class="lim" id="limtable"></table>
+      <div class="err" id="limerr"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn primary" id="limSave">Сохранить пороги</button>
+        <button class="btn" id="limDemo">Заполнить примером</button>
+        <button class="btn" id="limClear">Очистить λ</button>
+      </div>
+      <p class="muted" id="limsaved"></p>
+    </div>
+  </div>
+
+  <div id="view-info" role="tabpanel" hidden>
+    <div class="card"><h2>Параметры файла</h2><div class="params num" id="params"></div></div>
+    <div class="card" style="margin-top:12px">
+      <h2>Как пользоваться</h2>
+      <p class="muted">«Открыть SOR» → выберите файлы (можно сразу 1310 и 1550) из «Файлов», с флешки или из почты. Файлы только читаются и никуда не отправляются: расчёт идёт прямо на телефоне. Двумя пальцами — масштаб, одним — сдвиг, касание — курсор, двойное касание — вся трасса. Нажмите строку события, чтобы увидеть причины статуса.</p>
+      <p class="muted">Потери участков и накопленные потери показываются числом, только если их сумма совпадает с Total loss, записанным прибором. Viavi SmartOTDR считает потери участков по кривой, поэтому для его файлов здесь часто «—»; это честный результат, а не ошибка.</p>
+    </div>
+  </div>
+</main>
+<footer>STV SOR Trace Viewer, мобильная версия M1 · расчёты = настольная версия 0.4.0 (проверено на 771 файле) · чтение SOR по otdrparser 0.2.3 (BSD-2-Clause, © Markus Juenemann). Пример — открытый образец Anritsu MT9085 из тестов otdrparser, не данные заказчика.</footer>
+
+<script>/*__STV_CORE__*/</script>
+<script>
+var SAMPLE_B64 = "/*__SAMPLE__*/";
+(function () {
+  "use strict";
+  var S = STV;
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { traces: [], cur: -1, view: null, cursors: { a: null, b: null }, active: "a", selRow: null,
+    showPF: true, sections: true, onlyRepair: false, allowEst: false, profile: loadProfile(), limWl: "1310" };
+
+  // ---------- storage (device convenience only) ----------
+  function loadProfile() {
+    try { var t = localStorage.getItem("stv.profile.v1"); if (t) { var p = JSON.parse(t); var base = S.newProfile(p.name); base.checksEnabled = p.checksEnabled !== false; base.limits = p.limits || {}; return base; } } catch (e) {}
+    return S.newProfile();
+  }
+  function saveProfile() {
+    try { localStorage.setItem("stv.profile.v1", JSON.stringify({ name: state.profile.name, checksEnabled: state.profile.checksEnabled, limits: state.profile.limits })); return true; } catch (e) { return false; }
+  }
+
+  // ---------- helpers ----------
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function f3(v) { return v === null || v === undefined ? "—" : v.toFixed(3); }
+  function f2(v) { return v === null || v === undefined ? "—" : v.toFixed(2); }
+  function pal(st) { return { pass: "var(--pass)", warn: "var(--warn)", fail: "var(--fail)", no_data: "var(--nodata)" }[st]; }
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function cur() { return state.traces[state.cur] || null; }
+  function prof() { return state.showPF ? state.profile : null; }
+  function banner(text, info) { var d = document.createElement("div"); d.className = "banner" + (info ? " info" : ""); d.textContent = text; d.addEventListener("click", function () { d.remove(); }); $("banners").appendChild(d); }
+
+  // ---------- traces ----------
+  function addTrace(m, label) {
+    state.traces.push({ m: m, label: label || m.source, span: S.defaultSpanSettings() });
+    selectTrace(state.traces.length - 1);
+  }
+  function selectTrace(i) {
+    state.cur = i; state.selRow = null; state.view = null;
+    var t = cur(); state.cursors = { a: null, b: null };
+    if (t) { var x = t.m.distance; state.cursors.a = x[0]; state.cursors.b = x[x.length - 1]; }
+    loadSpanForm(); render();
+  }
+  function closeTrace(i) { state.traces.splice(i, 1); selectTrace(Math.min(state.cur, state.traces.length - 1)); }
+  function renderChips() {
+    var c = $("chips"); c.innerHTML = "";
+    if (!state.traces.length) { c.innerHTML = '<span class="muted">Нет открытых трасс</span>'; return; }
+    state.traces.forEach(function (t, i) {
+      var b = document.createElement("button"); b.className = "chip"; b.setAttribute("aria-pressed", i === state.cur ? "true" : "false");
+      var st = S.combine(buildRowsFor(t).concat([]).reduce(function (a, r) { return a.concat(r.checks); }, []).concat(S.traceChecks(t.m, prof())));
+      b.innerHTML = '<span class="dot" style="background:' + (state.showPF ? pal(st) : "var(--nodata)") + '"></span>' + esc(t.label) +
+        (t.m.wavelength ? ' · ' + t.m.wavelength + ' нм' : '') + ' <span class="x" aria-label="Закрыть">✕</span>';
+      b.addEventListener("click", function (ev) { if (ev.target.classList.contains("x")) closeTrace(i); else selectTrace(i); });
+      c.appendChild(b);
+    });
+  }
+  $("fileinput").addEventListener("change", function (ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    files.forEach(function (f) {
+      var rd = new FileReader();
+      rd.onload = function () {
+        try { addTrace(S.parseSor(new Uint8Array(rd.result), f.name), f.name.replace(/\.sor$/i, "")); }
+        catch (e) { banner("«" + f.name + "» не открыт: " + e.message + ". Нужен файл SOR версии 2 с одной трассой."); }
+      };
+      rd.onerror = function () { banner("«" + f.name + "» не удалось прочитать."); };
+      rd.readAsArrayBuffer(f);
+    });
+    ev.target.value = "";
+  });
+
+  // ---------- computations ----------
+  function ctxFor(t) { if (!t._ctx || t._ctxEst !== state.allowEst) { t._ctx = S.makeContext(t.m, state.allowEst); t._ctxEst = state.allowEst; } return t._ctx; }
+  function spanFor(t) { return S.computeSpan(t.m, t.span, ctxFor(t)); }
+  function buildRowsFor(t) { return S.buildRows(t.m, prof(), ctxFor(t), spanFor(t)); }
+
+  // ---------- plot ----------
+  var cv = $("plot"), g = cv.getContext("2d"), M = { l: 46, r: 10, t: 12, b: 26 };
+  function sizeCanvas() { var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1; cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); g.setTransform(d, 0, 0, d, 0, 0); return r; }
+  function niceStep(span, n) { var raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+  function drawPlot() {
+    var r = sizeCanvas(), W = r.width, H = r.height, t = cur();
+    g.clearRect(0, 0, W, H); g.fillStyle = cssVar("--panel"); g.fillRect(0, 0, W, H);
+    if (!t) { g.fillStyle = cssVar("--muted"); g.font = "14px " + cssVar("--font-body"); g.fillText("Откройте файл SOR", 16, H / 2); return; }
+    var x = t.m.distance, y = t.m.signal, n = x.length;
+    if (!state.view) state.view = [x[0], x[n - 1]];
+    var x0 = state.view[0], x1 = state.view[1], pw = W - M.l - M.r, ph = H - M.t - M.b;
+    var i0 = lb(x, x0), i1 = Math.min(n - 1, lb(x, x1) + 1), ymin = Infinity, ymax = -Infinity;
+    for (var i = Math.max(0, i0 - 1); i <= i1; i++) { if (y[i] < ymin) ymin = y[i]; if (y[i] > ymax) ymax = y[i]; }
+    if (!(ymax > ymin)) { ymax = ymin + 1; }
+    var pad = (ymax - ymin) * 0.08; ymin -= pad; ymax += pad;
+    function X(v) { return M.l + (v - x0) / (x1 - x0) * pw; } function Y(v) { return M.t + (ymax - v) / (ymax - ymin) * ph; }
+    state._map = { X: X, Y: Y, x0: x0, x1: x1, pw: pw };
+    var grid = cssVar("--line"), muted = cssVar("--muted");
+    g.font = "11px " + cssVar("--font-num"); g.lineWidth = 1;
+    var sx = niceStep(x1 - x0, Math.max(3, Math.floor(pw / 80))), km = (x1 - x0) > 3000;
+    for (var gx = Math.ceil(x0 / sx) * sx; gx <= x1; gx += sx) { var px = X(gx); g.strokeStyle = grid; g.beginPath(); g.moveTo(px, M.t); g.lineTo(px, M.t + ph); g.stroke(); g.fillStyle = muted; g.fillText(km ? (gx / 1000).toFixed(sx < 1000 ? 1 : 0) : gx.toFixed(0), Math.min(px - 10, W - 30), H - 8); }
+    var sy = niceStep(ymax - ymin, 5);
+    for (var gy = Math.ceil(ymin / sy) * sy; gy <= ymax; gy += sy) { var py = Y(gy); g.strokeStyle = grid; g.beginPath(); g.moveTo(M.l, py); g.lineTo(M.l + pw, py); g.stroke(); g.fillStyle = muted; g.fillText(gy.toFixed(sy < 1 ? 1 : 0), 4, py + 4); }
+    g.fillStyle = muted; g.fillText(km ? "км" : "м", 4, H - 8); g.fillText("дБ", 4, M.t + 8);
+    // span shading
+    var sp = spanFor(t);
+    if (sp.valid && (t.span.beginEnabled || t.span.endEnabled)) {
+      g.fillStyle = "rgba(217,48,37,0.07)"; g.fillRect(X(sp.begin), M.t, X(sp.end) - X(sp.begin), ph);
+      g.strokeStyle = cssVar("--fail"); g.setLineDash([5, 4]);
+      [sp.begin, sp.end].forEach(function (v) { g.beginPath(); g.moveTo(X(v), M.t); g.lineTo(X(v), M.t + ph); g.stroke(); });
+      g.setLineDash([]);
+    }
+    // trace (min/max per pixel column)
+    g.save(); g.beginPath(); g.rect(M.l, M.t, pw, ph); g.clip();
+    g.strokeStyle = cssVar("--trace"); g.lineWidth = 1.3; g.beginPath();
+    var col = -1, cmin = 0, cmax = 0, first = true;
+    for (i = Math.max(0, i0 - 1); i <= i1; i++) {
+      var c = Math.floor(X(x[i]));
+      if (c !== col) { if (col >= 0) { g.lineTo(col + 0.5, Y(cmin)); g.lineTo(col + 0.5, Y(cmax)); } col = c; cmin = cmax = y[i]; if (first) { g.moveTo(c + 0.5, Y(y[i])); first = false; } }
+      else { if (y[i] < cmin) cmin = y[i]; if (y[i] > cmax) cmax = y[i]; }
+    }
+    if (col >= 0) { g.lineTo(col + 0.5, Y(cmin)); g.lineTo(col + 0.5, Y(cmax)); }
+    g.stroke();
+    // event markers
+    var rows = buildRowsFor(t);
+    rows.forEach(function (row) {
+      if (row.kind !== "event" || row.from === null || row.from < x0 || row.from > x1) return;
+      var j = Math.min(n - 1, lb(x, row.from)), px = X(row.from), py = Y(y[j]);
+      g.fillStyle = state.showPF ? cssVar({ pass: "--pass", warn: "--warn", fail: "--fail", no_data: "--nodata" }[row.status]) : "#5f6b7a";
+      g.beginPath(); g.moveTo(px, py + 2); g.lineTo(px - 6, py + 12); g.lineTo(px + 6, py + 12); g.closePath(); g.fill();
+      g.fillStyle = cssVar("--ink"); g.font = "11px " + cssVar("--font-num"); g.fillText(row.num, px - 3, py + 24);
+    });
+    // cursors
+    [["a", "#d93025", "A"], ["b", "#2e9e48", "B"]].forEach(function (cfg) {
+      var v = state.cursors[cfg[0]]; if (v === null || v < x0 || v > x1) return;
+      g.strokeStyle = cfg[1]; g.lineWidth = state.active === cfg[0] ? 2 : 1.2; g.beginPath(); g.moveTo(X(v), M.t); g.lineTo(X(v), M.t + ph); g.stroke();
+      g.fillStyle = cfg[1]; g.font = "bold 12px " + cssVar("--font-body"); g.fillText(cfg[2], X(v) + 4, M.t + 12);
+    });
+    g.restore();
+    renderReadout();
+  }
+  function lb(arr, v) { var lo = 0, hi = arr.length - 1; while (lo < hi) { var mid = (lo + hi) >> 1; if (arr[mid] < v) lo = mid + 1; else hi = mid; } return lo; }
+  function levelAt(m, d) { var x = m.distance, j = lb(x, d); if (j > 0 && Math.abs(x[j - 1] - d) < Math.abs(x[j] - d)) j--; return { d: x[j], y: m.signal[j] }; }
+  function renderReadout() {
+    var t = cur(); if (!t) { $("readout").textContent = ""; return; }
+    var a = levelAt(t.m, state.cursors.a), b = levelAt(t.m, state.cursors.b);
+    $("readout").innerHTML = '<span style="color:#d93025">A</span> <b>' + a.d.toFixed(2) + ' м</b> ' + a.y.toFixed(3) + ' дБ · ' +
+      '<span style="color:#2e9e48">B</span> <b>' + b.d.toFixed(2) + ' м</b> ' + b.y.toFixed(3) + ' дБ · Δ <b>' + (b.d - a.d).toFixed(2) + ' м</b>, <b>' + (b.y - a.y).toFixed(3) + ' дБ</b>';
+  }
+  function setView(a, b) {
+    var t = cur(); if (!t) return; var x = t.m.distance, lo = x[0], hi = x[x.length - 1], minw = Math.max((hi - lo) / 20000, 2);
+    if (b - a < minw) { var c = (a + b) / 2; a = c - minw / 2; b = c + minw / 2; }
+    if (b - a > hi - lo) { a = lo; b = hi; }
+    if (a < lo) { b += lo - a; a = lo; } if (b > hi) { a -= b - hi; b = hi; }
+    state.view = [a, b]; drawPlot();
+  }
+  function zoom(f, center) { var v = state.view; if (!v) return; var c = center === undefined ? (v[0] + v[1]) / 2 : center; setView(c - (c - v[0]) * f, c + (v[1] - c) * f); }
+  $("zoomIn").onclick = function () { zoom(0.5); }; $("zoomOut").onclick = function () { zoom(2); }; $("zoomAll").onclick = function () { state.view = null; drawPlot(); };
+  function setActive(k) { state.active = k; $("curA").setAttribute("aria-pressed", k === "a"); $("curB").setAttribute("aria-pressed", k === "b"); drawPlot(); }
+  $("curA").onclick = function () { setActive("a"); }; $("curB").onclick = function () { setActive("b"); };
+  // touch & mouse
+  var ptrs = {}, gest = null, lastTap = 0;
+  function dataX(clientX) { var r = cv.getBoundingClientRect(), mp = state._map; return mp.x0 + (clientX - r.left - M.l) / mp.pw * (mp.x1 - mp.x0); }
+  cv.addEventListener("pointerdown", function (e) {
+    cv.setPointerCapture(e.pointerId); ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(ptrs);
+    if (ids.length === 1) gest = { type: "pan", sx: e.clientX, sy: e.clientY, view: state.view.slice(), moved: false, t: Date.now() };
+    else if (ids.length === 2) { var p = ids.map(function (k) { return ptrs[k].x; }); gest = { type: "pinch", d0: Math.abs(p[0] - p[1]) || 1, c: dataX((p[0] + p[1]) / 2), view: state.view.slice() }; }
+  });
+  cv.addEventListener("pointermove", function (e) {
+    if (!ptrs[e.pointerId] || !gest) return; ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var mp = state._map;
+    if (gest.type === "pan") {
+      var dx = e.clientX - gest.sx; if (Math.abs(dx) > 6 || Math.abs(e.clientY - gest.sy) > 6) gest.moved = true;
+      if (gest.moved) { var dd = dx / mp.pw * (gest.view[1] - gest.view[0]); setView(gest.view[0] - dd, gest.view[1] - dd); }
+    } else if (gest.type === "pinch") {
+      var ids = Object.keys(ptrs); if (ids.length < 2) return;
+      var d = Math.abs(ptrs[ids[0]].x - ptrs[ids[1]].x) || 1, f = gest.d0 / d, c = gest.c;
+      setView(c - (c - gest.view[0]) * f, c + (gest.view[1] - c) * f);
+    }
+  });
+  function endPtr(e) {
+    if (gest && gest.type === "pan" && !gest.moved && Date.now() - gest.t < 400) {
+      var now = Date.now();
+      if (now - lastTap < 300) { state.view = null; drawPlot(); lastTap = 0; }
+      else { lastTap = now; state.cursors[state.active] = levelAt(cur().m, dataX(e.clientX)).d; drawPlot(); }
+    }
+    delete ptrs[e.pointerId]; if (!Object.keys(ptrs).length) gest = null; else if (gest && gest.type === "pinch") gest = null;
+  }
+  cv.addEventListener("pointerup", endPtr); cv.addEventListener("pointercancel", endPtr);
+  cv.addEventListener("wheel", function (e) { if (!state.view) return; e.preventDefault(); zoom(e.deltaY > 0 ? 1.25 : 0.8, dataX(e.clientX)); }, { passive: false });
+  window.addEventListener("resize", drawPlot);
+
+  // ---------- tabs ----------
+  ["events", "span", "limits", "info"].forEach(function (k) {
+    $("tab-" + k).addEventListener("click", function () {
+      ["events", "span", "limits", "info"].forEach(function (j) { $("tab-" + j).setAttribute("aria-selected", j === k); $("view-" + j).hidden = j !== k; });
+    });
+  });
+
+  // ---------- events view ----------
+  function statusPill(st, text) { return '<span class="pill st-' + st + '"><span class="dot" style="background:' + pal(st) + '"></span>' + esc(text || S.STATUS_TEXT[st]) + '</span>'; }
+  function renderSummary(t, rows) {
+    var ctx = ctxFor(t), sp = spanFor(t), trace = S.traceChecks(t.m, prof());
+    var all = rows.reduce(function (a, r) { return a.concat(r.checks); }, []).concat(trace), st = S.combine(all);
+    var nRepair = rows.filter(function (r) { return r.repairStatus; }).length;
+    var chk = ctx.check, okc = ctx.trusted;
+    $("summary").className = "card stripe-" + (state.showPF ? st : "no_data");
+    $("summary").innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">' +
+      '<h2 style="margin:0">' + esc(t.label) + '</h2>' + (state.showPF ? statusPill(st, "Трасса: " + S.STATUS_TEXT[st]) : '<span class="muted">Pass/Fail выключен</span>') + '</div>' +
+      '<div class="summary">' +
+      kv("Total loss прибора", f3(t.m.totalLoss) + " дБ") + kv("Длина волокна", t.m.fiberLength ? (t.m.fiberLength).toFixed(2) + " м" : "—") +
+      kv("ORL", t.m.orl ? f3(t.m.orl) + " дБ" : "—") + kv("Итог Span", sp.total === null ? "не рассчитано" : (sp.totalEstimate ? "≈ " : "") + f3(sp.total) + " дБ") +
+      kv("Требует проверки", state.showPF ? String(nRepair) : "—") + kv("λ", t.m.wavelength ? t.m.wavelength + " нм" : "не опр.") + '</div>' +
+      '<div class="check ' + (okc ? "st-pass" : chk.diff === null ? "st-no_data" : "st-warn") + '" style="margin-top:10px">' +
+      (okc ? "Сверка с прибором: совпадает. " : "Сверка с прибором: ") + esc(chk.text) + '</div>';
+  }
+  function kv(k, v) { return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v num">' + esc(v) + '</span></div>'; }
+  function cellCls(c) { return state.showPF && c ? ' class="c-' + c.status + '"' : ""; }
+  function renderTable(t) {
+    var rows = buildRowsFor(t); t._rows = rows;
+    renderSummary(t, rows);
+    var shown = rows.filter(function (r) { return (state.sections || r.kind === "event") && (!state.onlyRepair || !state.showPF || r.repairStatus); });
+    var h = '<thead><tr><th>Событие</th><th>Расстояние м</th><th>Потери дБ</th><th>Отражение</th><th>Наклон дБ/км</th><th>Секция м</th><th>Потери уч. дБ</th><th>Накопл. дБ</th><th>Статус</th></tr></thead><tbody>';
+    shown.forEach(function (r) {
+      var i = rows.indexOf(r), sel = state.selRow === i ? " sel" : "";
+      if (r.kind === "event") {
+        h += '<tr class="event' + sel + '" data-i="' + i + '"><td>' + esc(r.num) + ' <span class="muted">' + esc(r.type) + '</span></td><td>' + f2(r.from) + '</td>' +
+          '<td' + cellCls(r.cells.loss) + '>' + f3(r.loss) + '</td><td' + cellCls(r.cells.reflectance) + '>' + (r.refl === null ? "—" : r.refl.toFixed(2)) + '</td>' +
+          '<td></td><td></td><td></td><td title="' + esc(r.cumNote) + '">' + (r.cum === null ? "—" : (r.cumEstimate ? "≈ " : "") + f3(r.cum)) + '</td>' +
+          '<td>' + (state.showPF ? (r.repairStatus ? '<span class="repair" style="color:' + pal(r.repairStatus) + '">' + esc(r.repairText) + '</span>' : esc(S.STATUS_TEXT[r.status])) : "—") + '</td></tr>';
+      } else {
+        h += '<tr class="section"><td>' + esc(r.num) + '</td><td></td><td></td><td></td><td' + cellCls(r.cells.slope) + '>' + (r.slope === null ? "—" : r.slope.toFixed(3)) + '</td>' +
+          '<td>' + f2(r.length) + '</td><td title="' + esc(r.secNote) + '">' + (r.secLoss === null ? "—" : (r.secEstimate ? "≈ " : "") + f3(r.secLoss)) + '</td>' +
+          '<td title="' + esc(r.cumNote) + '">' + (r.cum === null ? "—" : (r.cumEstimate ? "≈ " : "") + f3(r.cum)) + '</td><td></td></tr>';
+      }
+    });
+    if (!shown.length) h += '<tr><td colspan="9" style="text-align:left">Нет строк для показа.</td></tr>';
+    $("evtable").innerHTML = h + "</tbody>";
+    Array.prototype.forEach.call($("evtable").querySelectorAll("tr.event"), function (tr) {
+      tr.addEventListener("click", function () { selectRow(+tr.getAttribute("data-i")); });
+    });
+    renderDetail(t);
+  }
+  function selectRow(i) {
+    var t = cur(); state.selRow = state.selRow === i ? null : i;
+    var r = t._rows[i]; if (r && r.from !== null && state.selRow !== null) state.cursors.a = r.from;
+    renderTable(t); drawPlot();
+  }
+  function renderDetail(t) {
+    var d = $("detail"), r = state.selRow === null ? null : t._rows[state.selRow];
+    if (!r) { d.hidden = true; return; }
+    var h = '<h2>Событие ' + esc(r.num) + ' · ' + esc(r.type) + '</h2>';
+    if (state.showPF && r.repairStatus) h += '<div class="check st-' + r.repairStatus + '"><b>' + esc(r.repairText) + '</b><br>' + r.repairReasons.map(esc).join("<br>") + '<br><span class="muted">Отражающий пик сам по себе не доказывает повреждение; нужна проверка на месте.</span></div>';
+    h += r.checks.map(function (c) { return '<div class="check st-' + c.status + '">' + esc(S.describe(c)) + '</div>'; }).join("");
+    if (r.note) h += '<div class="muted">' + esc(r.note) + '</div>';
+    h += '<div class="muted">Накопленные потери: ' + esc(r.cumNote || "—") + '</div>';
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="mkBegin">Начало Span здесь</button><button class="btn small" id="mkEnd">Конец Span здесь</button></div><div class="err" id="mkErr"></div>';
+    d.innerHTML = h; d.hidden = false;
+    $("mkBegin").onclick = function () { spanFromRow(r, "begin"); }; $("mkEnd").onclick = function () { spanFromRow(r, "end"); };
+  }
+  function spanFromRow(r, which) {
+    var t = cur(), m = t.m, o = S.physicalOrder(m).valid;
+    if (which === "begin") { var k = o.indexOf(r.eventIndex); if (k < 0) { $("mkErr").textContent = "у события некорректная координата"; return; } t.span.beginEnabled = true; t.span.beginMode = "index"; t.span.beginIndex = k + 1; }
+    else { var ref = S.reverseReference(m), j = ref.indexOf(r.eventIndex); if (j < 0) { $("mkErr").textContent = "событие за концом волокна не может быть концом Span"; return; } t.span.endEnabled = true; t.span.endMode = "reverse_index"; t.span.endIndex = ref.length - j; }
+    loadSpanForm(); render();
+  }
+  $("optSections").onchange = function (e) { state.sections = e.target.checked; render(); };
+  $("optRepair").onchange = function (e) { state.onlyRepair = e.target.checked; render(); };
+
+  // ---------- span view ----------
+  function loadSpanForm() {
+    var t = cur(), s = t ? t.span : S.defaultSpanSettings();
+    $("spBeginOn").checked = s.beginEnabled; $("spBeginMode").value = s.beginMode; $("spBeginVal").value = s.beginMode === "index" ? s.beginIndex : s.beginLength;
+    $("spEndOn").checked = s.endEnabled; $("spEndMode").value = s.endMode; $("spEndVal").value = s.endMode === "reverse_index" ? s.endIndex : s.endLength;
+    $("spIncB").checked = s.includeBegin; $("spIncE").checked = s.includeEnd; $("spEst").checked = state.allowEst;
+  }
+  function num(v) { var x = parseFloat(String(v).replace(",", ".")); return isFinite(x) ? x : NaN; }
+  function readSpanForm() {
+    var t = cur(); if (!t) return; var s = t.span;
+    s.beginEnabled = $("spBeginOn").checked; s.beginMode = $("spBeginMode").value;
+    if (s.beginMode === "index") s.beginIndex = Math.round(num($("spBeginVal").value)); else s.beginLength = num($("spBeginVal").value);
+    s.endEnabled = $("spEndOn").checked; s.endMode = $("spEndMode").value;
+    if (s.endMode === "reverse_index") s.endIndex = Math.round(num($("spEndVal").value)); else s.endLength = num($("spEndVal").value);
+    s.includeBegin = $("spIncB").checked; s.includeEnd = $("spIncE").checked; state.allowEst = $("spEst").checked;
+    render();
+  }
+  ["spBeginOn", "spBeginMode", "spBeginVal", "spEndOn", "spEndMode", "spEndVal", "spIncB", "spIncE", "spEst"].forEach(function (id) { $(id).addEventListener("change", readSpanForm); });
+  $("spBeginMode").addEventListener("change", function () { $("spBeginVal").value = $("spBeginMode").value === "index" ? 1 : 0; readSpanForm(); });
+  $("spEndMode").addEventListener("change", function () { $("spEndVal").value = $("spEndMode").value === "reverse_index" ? 1 : 0; readSpanForm(); });
+  function renderSpan(t) {
+    var sp = spanFor(t), ctx = ctxFor(t), h = "";
+    if (sp.valid) {
+      h += '<div class="summary">' + kv("Длина Span", sp.length.toFixed(2) + " м") + kv("Итог Span", sp.total === null ? "не рассчитано" : (sp.totalEstimate ? "≈ " : "") + f3(sp.total) + " дБ") + kv("Граничные потери", sp.boundaryLoss === null ? "—" : f3(sp.boundaryLoss) + " дБ") + '</div>';
+      h += '<p class="muted">Начало: ' + sp.begin.toFixed(2) + ' м — ' + esc(sp.beginText) + '<br>Конец: ' + sp.end.toFixed(2) + ' м — ' + esc(sp.endText) + '<br>Граничные: ' + esc(sp.boundaryText) + '<br>Итог: ' + esc(sp.totalText) + '</p>';
+    } else h += '<p class="err">Span не определён: ' + esc(sp.errors.join("; ")) + '</p>';
+    h += '<div class="check ' + (ctx.trusted ? "st-pass" : ctx.check.diff === null ? "st-no_data" : "st-warn") + '">Сверка с прибором: ' + esc(ctx.check.text) + '</div>';
+    $("spanResult").innerHTML = h;
+  }
+
+  // ---------- limits view ----------
+  var LIM_ROWS = [["splice_loss", "Потеря сварки, дБ", "high"], ["connector_loss", "Потеря соединителя, дБ", "high"], ["reflectance", "Отражение, дБ", "high"],
+    ["slope", "Затухание, дБ/км", "high"], ["total_loss", "Потери линии, дБ", "high"], ["total_orl", "ORL линии, дБ (не меньше)", "low"]];
+  function renderLimits() {
+    var wls = ["1310", "1550"]; state.traces.forEach(function (t) { var k = S.wavelengthKey(t.m.wavelength); if (k && wls.indexOf(k) < 0) wls.push(k); });
+    $("wlchips").innerHTML = wls.map(function (w) { return '<button class="chip" data-w="' + w + '" aria-pressed="' + (w === state.limWl) + '">' + w + ' нм</button>'; }).join("");
+    Array.prototype.forEach.call($("wlchips").querySelectorAll("button"), function (b) { b.onclick = function () { state.limWl = b.getAttribute("data-w"); renderLimits(); }; });
+    var L = state.profile.limits[state.limWl] || {};
+    var h = '<tr><th>Метрика (' + state.limWl + ' нм)</th><th>Внимание</th><th>Нарушение</th></tr>';
+    LIM_ROWS.forEach(function (row) {
+      var v = L[row[0]] || {}, w = row[2] === "high" ? v.warn_high : v.warn_low, f = row[2] === "high" ? v.fail_high : v.fail_low;
+      h += '<tr><td>' + esc(row[1]) + '</td><td><input id="lw-' + row[0] + '" inputmode="decimal" value="' + (w === undefined || w === null ? "" : w) + '" aria-label="' + esc(row[1]) + ' внимание"></td>' +
+        '<td><input id="lf-' + row[0] + '" inputmode="decimal" value="' + (f === undefined || f === null ? "" : f) + '" aria-label="' + esc(row[1]) + ' нарушение"></td></tr>';
+    });
+    $("limtable").innerHTML = h;
+    $("optPF").checked = state.showPF; $("optChecks").checked = state.profile.checksEnabled;
+  }
+  function readLimits() {
+    var errs = [], out = {};
+    LIM_ROWS.forEach(function (row) {
+      function rd(id) { var s = $(id).value.trim(); if (s === "") return null; var x = num(s); if (!isFinite(x)) { errs.push(row[1] + ": «" + s + "» не число"); return null; } return x; }
+      var w = rd("lw-" + row[0]), f = rd("lf-" + row[0]), v = row[2] === "high" ? { warn_high: w, fail_high: f } : { warn_low: w, fail_low: f };
+      var e = S.validateLimits(row[0], row[2] === "high" ? "upper" : "lower", v); e.forEach(function (x) { errs.push(row[1] + ": " + x); });
+      out[row[0]] = v;
+    });
+    return { errs: errs, limits: out };
+  }
+  $("limSave").onclick = function () {
+    var r = readLimits(); $("limerr").textContent = r.errs.join(" · ");
+    if (r.errs.length) return;
+    if (state._demoLimits && state.limWl !== "1310") delete state.profile.limits["1310"];
+    state._demoLimits = false;
+    state.profile.limits[state.limWl] = r.limits;
+    var ok = saveProfile(); $("limsaved").textContent = ok ? "Пороги для " + state.limWl + " нм сохранены на этом устройстве." : "Пороги применены, но браузер не дал сохранить их до следующего запуска.";
+    invalidate(); render();
+  };
+  $("limDemo").onclick = function () {
+    var demo = { "1310": [-45, -35], "1550": [-50, -40] }[state.limWl] || [-45, -35];
+    state.profile.limits[state.limWl] = { splice_loss: { warn_high: 0.1, fail_high: 0.3 }, connector_loss: { warn_high: 0.5, fail_high: 0.75 },
+      reflectance: { warn_high: demo[0], fail_high: demo[1] }, slope: { warn_high: 0.35, fail_high: 0.5 }, total_loss: {}, total_orl: { warn_low: 30, fail_low: 27 } };
+    renderLimits(); $("limsaved").textContent = "Заполнено примером (не норматив). Проверьте и нажмите «Сохранить пороги».";
+  };
+  $("limClear").onclick = function () { delete state.profile.limits[state.limWl]; saveProfile(); renderLimits(); invalidate(); render(); $("limsaved").textContent = "Пороги " + state.limWl + " нм удалены."; };
+  $("optPF").onchange = function (e) { state.showPF = e.target.checked; render(); };
+  $("optChecks").onchange = function (e) { state.profile.checksEnabled = e.target.checked; saveProfile(); render(); };
+  function invalidate() { state.traces.forEach(function (t) { t._ctx = null; }); }
+
+  // ---------- info ----------
+  function renderInfo(t) {
+    if (!t) { $("params").innerHTML = ""; return; }
+    var p = [["Файл", t.m.source], ["Прибор (SupParams)", t.m.instrument || "—"]].concat(t.m.params).concat([["Блоки файла", t.m.blocks.join(", ")]]);
+    $("params").innerHTML = p.map(function (kv_) { return '<div>' + esc(kv_[0]) + '</div><div>' + esc(kv_[1]) + '</div>'; }).join("");
+  }
+
+  // ---------- render ----------
+  function render() {
+    var t = cur();
+    $("subtitle").textContent = t ? (t.m.instrument || "SOR") + " · " + t.m.events.length + " событий · файл не изменяется" : "Просмотр SOR без изменения файлов";
+    renderChips();
+    if (t) { renderTable(t); renderSpan(t); } else { $("summary").innerHTML = "Откройте файл SOR."; $("evtable").innerHTML = ""; $("spanResult").innerHTML = ""; $("detail").hidden = true; }
+    renderLimits(); renderInfo(t); drawPlot();
+  }
+
+  // ---------- start with the labelled example ----------
+  try {
+    var bin = atob(SAMPLE_B64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var hasLimits = Object.keys(state.profile.limits).length > 0;
+    if (!hasLimits) { state.profile.limits["1310"] = { splice_loss: { warn_high: 0.1, fail_high: 0.3 }, connector_loss: { warn_high: 0.3, fail_high: 0.5 }, reflectance: { warn_high: -40, fail_high: -30 } }; state._demoLimits = true; }
+    addTrace(S.parseSor(bytes, "example3-anritsu-accessmastermt9085.sor"), "Пример Anritsu");
+    banner("Открыт пример (открытый образец Anritsu MT9085) с демонстрационными порогами — не нормативы. Нажмите «Открыть SOR», чтобы выбрать свои файлы. Пороги — вкладка «Пороги».", true);
+  } catch (e) { banner("Пример не загрузился: " + e.message); render(); }
+})();
+</script>
+</body>
+</html>

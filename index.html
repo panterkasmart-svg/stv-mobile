@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="STV">
+<meta name="theme-color" content="#16233a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<title>STV рефлектограммы</title>
+<style>
+/* Layout idea: an instrument screen in your pocket — trace on top, Viavi-style event table below, tabs at the bottom edge of the work area. */
+:root {
+  --ink: #16233a;        /* text, instrument navy */
+  --paper: #f3f5f8;      /* page */
+  --panel: #ffffff;      /* cards */
+  --line: #d5dbe5;       /* rules */
+  --muted: #5b677a;      /* secondary text */
+  --accent: #3b2fb0;     /* Viavi-like indigo: controls, selection */
+  --trace: #1f5fbf;      /* trace line */
+  --pass: #2e9e48; --warn: #c99400; --fail: #d93025; --nodata: #9e9e9e;
+  --pass-bg: #e3f3e7; --warn-bg: #fbf1cf; --fail-bg: #fbe0dd; --nodata-bg: #ececec;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --gutter: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #e6ebf4; --paper: #0f1622; --panel: #172133; --line: #2b3850; --muted: #9aa7bc;
+    --accent: #9d93ff; --trace: #6fa8ff;
+    --pass-bg: #173a24; --warn-bg: #3d3212; --fail-bg: #45201d; --nodata-bg: #2a2f38;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #e6ebf4; --paper: #0f1622; --panel: #172133; --line: #2b3850; --muted: #9aa7bc;
+  --accent: #9d93ff; --trace: #6fa8ff;
+  --pass-bg: #173a24; --warn-bg: #3d3212; --fail-bg: #45201d; --nodata-bg: #2a2f38;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.4 var(--font-body);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-text-size-adjust: 100%; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+header.top { display: flex; align-items: center; gap: 10px; padding: 10px var(--gutter); background: var(--ink); color: var(--paper); }
+:root[data-theme="dark"] header.top { background: #0a0f18; color: var(--ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) header.top { background: #0a0f18; color: var(--ink); } }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .02em; }
+header.top .sub { font-size: 12px; opacity: .75; }
+header.top .grow { flex: 1; min-width: 0; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 12px; min-height: 40px; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.btn.small { min-height: 34px; padding: 4px 10px; font-size: 14px; }
+.btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+label.filebtn { display: inline-flex; align-items: center; gap: 6px; }
+label.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.chips { display: flex; gap: 8px; padding: 8px var(--gutter); overflow-x: auto; background: var(--panel); border-bottom: 1px solid var(--line); }
+.chip { flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--paper); white-space: nowrap; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
+.chip .x { opacity: .7; padding: 0 2px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.banner { margin: 8px var(--gutter) 0; padding: 10px 12px; border-radius: 10px; background: var(--fail-bg); border-left: 6px solid var(--fail); font-size: 14px; }
+.banner.info { background: var(--nodata-bg); border-left-color: var(--accent); }
+.plotwrap { position: relative; background: var(--panel); border-bottom: 1px solid var(--line); }
+canvas#plot { display: block; width: 100%; height: 42vh; min-height: 230px; max-height: 460px; touch-action: none; }
+.plotbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px var(--gutter) 8px; }
+.readout { font-size: 13px; color: var(--muted); padding: 0 var(--gutter) 8px; }
+.readout b { color: var(--ink); font-weight: 600; }
+nav.tabs { display: flex; position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); }
+nav.tabs button { flex: 1; border: 0; background: none; padding: 12px 4px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+main { padding: 12px var(--gutter) 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+main > div { min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.card h2 { font-size: 15px; margin: 0 0 8px; text-wrap: balance; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.kv { display: grid; gap: 2px; }
+.kv .k { font-size: 12px; color: var(--muted); }
+.kv .v { font-size: 17px; font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 600; }
+.st-pass { background: var(--pass-bg); } .st-warn { background: var(--warn-bg); } .st-fail { background: var(--fail-bg); } .st-no_data { background: var(--nodata-bg); }
+.stripe-pass { border-left: 5px solid var(--pass); } .stripe-warn { border-left: 5px solid var(--warn); } .stripe-fail { border-left: 5px solid var(--fail); } .stripe-no_data { border-left: 5px solid var(--nodata); }
+.check { font-size: 13px; border-radius: 8px; padding: 8px 10px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.toggles label { display: inline-flex; gap: 8px; align-items: center; min-height: 36px; }
+input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+.tablewrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table.ev { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+table.ev th { text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--panel); }
+table.ev th:first-child, table.ev td:first-child { text-align: left; position: sticky; left: 0; background: var(--panel); }
+table.ev td { text-align: right; padding: 9px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.ev tr.section td { color: var(--muted); font-size: 13px; background: var(--paper); }
+table.ev tr.section td:first-child { background: var(--paper); }
+table.ev tr.event { cursor: pointer; }
+table.ev tr.sel td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+table.ev td.c-pass { background: var(--pass-bg); } table.ev td.c-warn { background: var(--warn-bg); } table.ev td.c-fail { background: var(--fail-bg); } table.ev td.c-no_data { background: var(--nodata-bg); }
+.repair { font-weight: 600; }
+.detail { display: grid; gap: 6px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; align-items: center; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 13px; color: var(--muted); }
+.field input, .field select { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--paper); min-height: 40px; width: 100%; }
+table.lim { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.lim th { font-size: 12px; color: var(--muted); text-align: left; padding: 6px 4px; font-weight: 600; }
+table.lim td { padding: 4px; }
+table.lim input { width: 100%; min-width: 64px; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--paper); font-family: var(--font-num); }
+.err { color: var(--fail); font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
+.params { display: grid; grid-template-columns: minmax(120px, 40%) 1fr; gap: 6px 12px; font-size: 14px; }
+.params div:nth-child(odd) { color: var(--muted); }
+footer { padding: 0 var(--gutter) 24px; color: var(--muted); font-size: 12px; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="grow">
+    <h1>STV рефлектограммы</h1>
+    <div class="sub" id="subtitle">Просмотр SOR без изменения файлов</div>
+  </div>
+  <label class="btn primary filebtn" for="fileinput">Открыть SOR<input id="fileinput" type="file" multiple></label>
+</header>
+<div class="chips" id="chips" role="toolbar" aria-label="Открытые трассы"></div>
+<div id="banners"></div>
+
+<section class="plotwrap" aria-label="График рефлектограммы">
+  <canvas id="plot"></canvas>
+  <div class="plotbar">
+    <button class="btn small" id="zoomOut" aria-label="Уменьшить">−</button>
+    <button class="btn small" id="zoomIn" aria-label="Увеличить">+</button>
+    <button class="btn small" id="zoomAll">Вся трасса</button>
+    <span class="muted" style="margin-left:auto">Касание ставит</span>
+    <button class="btn small" id="curA" aria-pressed="true">курсор A</button>
+    <button class="btn small" id="curB" aria-pressed="false">курсор B</button>
+  </div>
+  <div class="readout num" id="readout"></div>
+</section>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" id="tab-events" aria-selected="true" aria-controls="view-events">События</button>
+  <button role="tab" id="tab-span" aria-selected="false" aria-controls="view-span">Span</button>
+  <button role="tab" id="tab-limits" aria-selected="false" aria-controls="view-limits">Пороги</button>
+  <button role="tab" id="tab-info" aria-selected="false" aria-controls="view-info">Файл</button>
+</nav>
+
+<main>
+  <div id="view-events" role="tabpanel">
+    <div class="card" id="summary"></div>
+    <div class="toggles" style="margin:12px 0">
+      <label><input type="checkbox" id="optSections" checked> Участки между событиями</label>
+      <label><input type="checkbox" id="optRepair"> Только «требует проверки»</label>
+    </div>
+    <div class="tablewrap"><table class="ev num" id="evtable"></table></div>
+    <div class="card detail" id="detail" style="margin-top:12px" hidden></div>
+  </div>
+
+  <div id="view-span" role="tabpanel" hidden>
+    <div class="card">
+      <h2>Граница измеряемого участка</h2>
+      <div class="grid2">
+        <label><input type="checkbox" id="spBeginOn"> Set Span Begin</label>
+        <select id="spBeginMode" aria-label="Режим начала"><option value="index">Index (номер события)</option><option value="length">Length (длина шнура, м)</option></select>
+        <div class="field"><label for="spBeginVal">Значение начала</label><input id="spBeginVal" inputmode="decimal" value="1"></div>
+        <div></div>
+        <label><input type="checkbox" id="spEndOn"> Set Span End</label>
+        <select id="spEndMode" aria-label="Режим конца"><option value="reverse_index">Reverse Index (1 = конец волокна)</option><option value="reverse_length">Reverse Length (приёмный шнур, м)</option></select>
+        <div class="field"><label for="spEndVal">Значение конца</label><input id="spEndVal" inputmode="decimal" value="1"></div>
+        <div></div>
+      </div>
+      <div class="toggles" style="margin-top:8px">
+        <label><input type="checkbox" id="spIncB"> Include Begin loss</label>
+        <label><input type="checkbox" id="spIncE"> Include End loss</label>
+        <label><input type="checkbox" id="spEst"> Показывать «≈ оценку», если не сходится с прибором</label>
+      </div>
+    </div>
+    <div class="card" id="spanResult" style="margin-top:12px"></div>
+  </div>
+
+  <div id="view-limits" role="tabpanel" hidden>
+    <div class="card">
+      <h2>Пороги Pass/Fail</h2>
+      <div class="toggles">
+        <label><input type="checkbox" id="optPF" checked> Показывать Pass/Fail и цвета</label>
+        <label><input type="checkbox" id="optChecks" checked> Применять проверки</label>
+      </div>
+      <p class="muted">Значения задаёте вы; заводских норм в программе нет. Значение, равное порогу, допустимо. Пороги хранятся только на этом устройстве.</p>
+      <div class="chips" id="wlchips" style="padding:8px 0;border:0;background:none"></div>
+      <table class="lim" id="limtable"></table>
+      <div class="err" id="limerr"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn primary" id="limSave">Сохранить пороги</button>
+        <button class="btn" id="limDemo">Заполнить примером</button>
+        <button class="btn" id="limClear">Очистить λ</button>
+      </div>
+      <p class="muted" id="limsaved"></p>
+    </div>
+  </div>
+
+  <div id="view-info" role="tabpanel" hidden>
+    <div class="card"><h2>Параметры файла</h2><div class="params num" id="params"></div></div>
+    <div class="card" style="margin-top:12px">
+      <h2>Как пользоваться</h2>
+      <p class="muted">«Открыть SOR» → выберите файлы (можно сразу 1310 и 1550) из «Файлов», с флешки или из почты. Файлы только читаются и никуда не отправляются: расчёт идёт прямо на телефоне. Двумя пальцами — масштаб, одним — сдвиг, касание — курсор, двойное касание — вся трасса. Нажмите строку события, чтобы увидеть причины статуса.</p>
+      <p class="muted">Потери участков и накопленные потери показываются числом, только если их сумма совпадает с Total loss, записанным прибором. Viavi SmartOTDR считает потери участков по кривой, поэтому для его файлов здесь часто «—»; это честный результат, а не ошибка.</p>
+    </div>
+  </div>
+</main>
+<footer>STV SOR Trace Viewer, мобильная версия M1 · расчёты = настольная версия 0.4.0 (проверено на 771 файле) · чтение SOR по otdrparser 0.2.3 (BSD-2-Clause, © Markus Juenemann). Пример — открытый образец Anritsu MT9085 из тестов otdrparser, не данные заказчика.</footer>
+
+<script>
+/* STV SOR Trace Viewer — mobile core (stage M1).
+ * Read-only SOR (Telcordia SR-4731 v2) reader and the measurement logic of
+ * STV 0.4.0 (desktop), ported 1:1 from Python:
+ *   importers/sor.py + otdrparser 0.2.3  -> parseSor()
+ *   quality.py                          -> evaluate(), combine(), profiles
+ *   sections.py                         -> buildRows(), traceChecks()
+ *   losses.py                           -> makeContext(), sectionLoss(), cumulativeAt(), spanTotal()
+ *   span.py                             -> computeSpan()
+ * The SOR reader follows otdrparser 0.2.3 (BSD-2-Clause, (c) its authors),
+ * itself based on pyOTDR and the SR-4731 reverse-engineering notes.
+ * No Qt, no DOM: runs in a browser and in Node (for verification against the desktop).
+ */
+(function (root) {
+  "use strict";
+  var C_M = 0.299792458 * 1000; // speed of light, m/us
+
+  // ------------------------------------------------------------------ reader
+  function Reader(buf, start, end) {
+    this.dv = new DataView(buf.buffer || buf, buf.byteOffset || 0, buf.byteLength);
+    this.pos = start || 0;
+    this.end = end === undefined ? this.dv.byteLength : end;
+  }
+  Reader.prototype.need = function (n) {
+    if (this.pos + n > this.end) throw new Error("файл обрезан: ожидалось ещё " + n + " байт");
+  };
+  Reader.prototype.u2 = function () { this.need(2); var v = this.dv.getUint16(this.pos, true); this.pos += 2; return v; };
+  Reader.prototype.s2 = function () { this.need(2); var v = this.dv.getInt16(this.pos, true); this.pos += 2; return v; };
+  Reader.prototype.u4 = function () { this.need(4); var v = this.dv.getUint32(this.pos, true); this.pos += 4; return v; };
+  Reader.prototype.s4 = function () { this.need(4); var v = this.dv.getInt32(this.pos, true); this.pos += 4; return v; };
+  Reader.prototype.zstr = function () {
+    var s = "";
+    for (;;) {
+      if (this.pos >= this.end) throw new Error("файл обрезан внутри строки");
+      var c = this.dv.getUint8(this.pos++);
+      if (c === 0) return s.trim();
+      s += String.fromCharCode(c); // latin-1
+    }
+  };
+  Reader.prototype.fstr = function (n) {
+    this.need(n); var s = "";
+    for (var i = 0; i < n; i++) s += String.fromCharCode(this.dv.getUint8(this.pos + i));
+    this.pos += n; return s.trim();
+  };
+
+  var FIBER_TYPES = { 0: 1, 651: 1, 652: 1, 653: 1, 654: 1, 655: 1 };
+
+  function parseMap(r) {
+    var m = { name: r.zstr(), version: r.u2() / 100, numbytes: r.u4(), numblocks: r.u2(), maps: [] };
+    if (m.name !== "Map") throw new Error("это не SOR версии 2 (нет блока Map)");
+    if (!(m.version >= 2 && m.version < 3)) throw new Error("поддерживается только SOR версии 2 (в файле " + m.version + ")");
+    if (m.numbytes <= 0 || m.numblocks < 1) throw new Error("неверный блок Map");
+    for (var i = 1; i < m.numblocks; i++) {
+      var e = { name: r.zstr(), version: r.u2() / 100, numbytes: r.u4() };
+      if (e.numbytes <= 0) throw new Error("неверный размер блока " + e.name);
+      m.maps.push(e);
+    }
+    return m;
+  }
+
+  function parseGen(r) {
+    var d = {};
+    d.name = r.zstr();
+    if (r.fstr(1) !== "\u0000") { r.pos -= 1; } // optional extra \0 after the name
+    var save = r.pos, lang = r.fstr(2);
+    if (/^[A-Z]{2}$/.test(lang)) d.language = lang; else r.pos = save;
+    d.cable_id = r.zstr();
+    d.fiber_id = r.zstr();
+    for (;;) { var ft = r.s2(); if (FIBER_TYPES[ft]) { d.fiber_type = ft; break; } }
+    d.wavelength = r.u2();
+    d.location_a = r.zstr(); d.location_b = r.zstr(); d.cable_code = r.zstr();
+    d.build_condition = r.fstr(2);
+    d.user_offset = r.s4(); d.user_offset_distance = r.s4();
+    d.operator = r.zstr(); d.comments = r.zstr();
+    return d;
+  }
+
+  function parseSup(r) {
+    return { name: r.zstr(), supplier_name: r.zstr(), otdr_name: r.zstr(), otdr_serial_number: r.zstr(),
+      module_name: r.zstr(), module_serial_number: r.zstr(), software_version: r.zstr(), other: r.zstr() };
+  }
+
+  function parseFxd(r) {
+    var d = { name: r.zstr(), date_time: r.u4(), units: r.fstr(2), wavelength: r.u2() / 10,
+      acquisition_offset: r.s4(), acquisition_offset_distance: r.s4(), number_of_pulse_width_entries: r.u2() };
+    if (d.number_of_pulse_width_entries !== 1) throw new Error("несколько длительностей импульса в одном файле не поддерживаются");
+    d.pulse_width = r.u2(); d.sample_spacing = r.u4(); d.number_of_data_points = r.u4();
+    d.index_of_refraction = r.u4() / 100000; d.backscattering_coefficient = r.u2() * -0.1;
+    d.number_of_averages = r.u4(); d.averaging_time = r.u2() * 0.1; d.range = r.u4() * 2e-5;
+    d.acquisition_range_distance = r.s4(); d.front_panel_offset = r.s4(); d.noise_floor_level = r.u2();
+    d.noise_floor_scaling_factor = r.s2(); d.power_offset_first_point = r.u2();
+    d.loss_threshold = r.u2() * 0.001; d.reflection_threshold = r.u2() * -0.001;
+    d.end_of_transmission_threshold = r.u2() * 0.001; d.trace_type = r.fstr(2);
+    if (d.sample_spacing <= 0) throw new Error("шаг отсчётов должен быть > 0");
+    if (d.index_of_refraction <= 0) throw new Error("показатель преломления должен быть > 0");
+    return d;
+  }
+
+  function parseData(r, spacing, ior) {
+    var d = { name: r.zstr(), n: r.u4(), traces: r.u2() };
+    if (d.traces !== 1) throw new Error("несколько трасс в одном файле не поддерживаются");
+    var n2 = r.u4(), sf = r.u2();
+    if (n2 !== d.n) throw new Error("число точек в DataPts не согласовано");
+    if (sf <= 0) throw new Error("масштаб DataPts должен быть > 0");
+    r.need(2 * d.n);
+    var x = new Float64Array(d.n), y = new Float64Array(d.n);
+    var step = spacing / 1e8 * C_M / ior;
+    for (var i = 0; i < d.n; i++) {
+      x[i] = i * step;
+      y[i] = r.dv.getUint16(r.pos, true) * -sf / 1e6; r.pos += 2;
+    }
+    d.x = x; d.y = y;
+    return d;
+  }
+
+  function parseKey(r, ior) {
+    var d = { name: r.zstr(), events: [] };
+    var count = r.u2();
+    for (var i = 0; i < count; i++) {
+      var e = { event_number: r.u2(), time_of_travel: r.u4() * 0.1, slope: r.s2() * 0.001,
+        splice_loss: r.s2() * 0.001, reflection_loss: r.s4() * 0.001, event_type: r.fstr(8) };
+      r.s4(); r.s4(); r.s4(); r.s4(); r.s4(); // markers
+      e.comment = r.zstr();
+      e.distance = e.time_of_travel / 1000 * C_M / ior;
+      d.events.push(e);
+    }
+    d.total_loss = r.s4() * 0.001;
+    d.fiber_start_position = r.s4() / 10000 * C_M / ior;
+    d.fiber_length = r.s4() / 10000 * C_M / ior;
+    d.optical_return_loss = r.u2() * 0.001;
+    return d;
+  }
+
+  function parseBlocks(bytes) {
+    var r = new Reader(bytes, 0);
+    var map = parseMap(r);
+    var blocks = { Map: map }, fxd = null, order = ["Map"];
+    for (var i = 0; i < map.maps.length; i++) {
+      var ent = map.maps[i], start = r.pos, end = start + ent.numbytes;
+      if (end > r.dv.byteLength) throw new Error("файл обрезан в блоке " + ent.name);
+      var br = new Reader(bytes, start, end), b;
+      if (ent.name === "GenParams") b = parseGen(br);
+      else if (ent.name === "SupParams") b = parseSup(br);
+      else if (ent.name === "FxdParams") { b = parseFxd(br); fxd = b; }
+      else if (ent.name === "DataPts") {
+        if (!fxd) throw new Error("DataPts раньше FxdParams");
+        b = parseData(br, fxd.sample_spacing, fxd.index_of_refraction);
+      } else if (ent.name === "KeyEvents") {
+        if (!fxd) throw new Error("KeyEvents раньше FxdParams");
+        b = parseKey(br, fxd.index_of_refraction);
+      } else b = { name: br.zstr() };
+      if (b.name !== ent.name) throw new Error("ожидался блок " + ent.name + ", найден " + b.name);
+      if (!(ent.name in blocks)) blocks[ent.name] = b;
+      order.push(ent.name);
+      r.pos = end;
+    }
+    if (!blocks.FxdParams || !blocks.DataPts) throw new Error("в файле нет обязательных блоков FxdParams/DataPts");
+    blocks._order = order;
+    return blocks;
+  }
+
+  function finite(v) { return typeof v === "number" && isFinite(v) ? v : null; }
+
+  /** Parse SOR bytes -> Measurement (same fields and meaning as desktop model.py). */
+  function parseSor(bytes, name) {
+    if (!bytes || bytes.byteLength === 0) throw new Error("Файл пуст");
+    var b = parseBlocks(bytes);
+    var fx = b.FxdParams, gp = b.GenParams || {}, sp = b.SupParams || {}, ke = b.KeyEvents || { events: [] };
+    var x = b.DataPts.x, y = b.DataPts.y;
+    if (fx.acquisition_offset) {
+      var off = fx.acquisition_offset * 1e-10 * 299792458.0 / fx.index_of_refraction;
+      for (var i = 0; i < x.length; i++) x[i] += off;
+    }
+    if (x.length < 2) throw new Error("Для графика нужны как минимум две точки");
+    var nominal = null;
+    [gp.wavelength, fx.wavelength].some(function (w) { var v = finite(w); if (v !== null && v > 0) { nominal = v; return true; } return false; });
+    var events = ke.events.map(function (e, i) {
+      return { number: e.event_number || i + 1, distance: e.distance, loss: e.splice_loss, refl: e.reflection_loss,
+        comment: e.comment || "", typeCode: e.event_type || "", slope: finite(e.slope) };
+    });
+    var params = [];
+    function add(k, v) { if (v !== null && v !== undefined && v !== "") params.push([k, String(v)]); }
+    if (fx.date_time > 0) add("Дата измерения (UTC)", new Date(fx.date_time * 1000).toISOString().replace("T", " ").slice(0, 19));
+    add("Начало отсчётов", x[0].toFixed(6) + " м");
+    add("Длина волны", fx.wavelength ? fx.wavelength + " нм" : (gp.wavelength ? gp.wavelength + " нм" : null));
+    add("Длина волны для порогов", nominal === null ? null : fmtG(nominal) + " нм");
+    add("Ширина импульса", fx.pulse_width ? fx.pulse_width + " нс" : null);
+    add("Показатель преломления", fx.index_of_refraction);
+    add("Время усреднения", fx.averaging_time ? fmtG(round(fx.averaging_time, 3)) + " с" : null);
+    add("Волокно", gp.fiber_id); add("Кабель", gp.cable_id);
+    add("Прибор", sp.otdr_name || sp.module_name);
+    add("Серийный номер", sp.otdr_serial_number || sp.module_serial_number);
+    add("Потеря линии", ke.total_loss !== undefined ? fmtG(round(ke.total_loss, 3)) + " дБ" : null);
+    add("Длина волокна", ke.fiber_length !== undefined ? ke.fiber_length + " м" : null);
+    add("ORL линии (SOR)", ke.optical_return_loss !== undefined ? fmtG(round(ke.optical_return_loss, 3)) + " дБ" : null);
+    for (var j = 1; j < x.length; j++) if (!(x[j] > x[j - 1])) throw new Error("Расстояния точек должны возрастать");
+    return { source: name || "trace.sor", distance: x, signal: y, params: params, events: events,
+      wavelength: nominal, totalLoss: finite(ke.total_loss), orl: finite(ke.optical_return_loss),
+      fiberLength: finite(ke.fiber_length), fiberStart: finite(ke.fiber_start_position),
+      instrument: [sp.supplier_name, sp.otdr_name].filter(Boolean).join(" "), blocks: b._order };
+  }
+  function round(v, n) { var p = Math.pow(10, n); return Math.round(v * p) / p; }
+  function fmtG(v) { return String(Number(v)); }
+
+  // ------------------------------------------------------------- events
+  function reflectionClass(e) { return { "0": "non-reflective", "1": "reflective", "2": "saturated-reflective" }[e.typeCode.charAt(0)] || null; }
+  function isEndOfFiber(e) { var c = e.typeCode.charAt(1); return c === "E" || c === "D"; }
+
+  // ------------------------------------------------------------ quality
+  var Status = { PASS: "pass", WARN: "warn", FAIL: "fail", NO_DATA: "no_data" };
+  var STATUS_TEXT = { pass: "Норма", warn: "Внимание", fail: "Нарушение", no_data: "Нет данных" };
+  var DEFAULT_PALETTE = { pass: "#2e9e48", warn: "#e0b000", fail: "#d93025", no_data: "#9e9e9e" };
+  var METRICS = [
+    { id: "splice_loss", title: "Splice loss (потеря сварки)", unit: "дБ", dirs: ["upper", "interval"] },
+    { id: "connector_loss", title: "Connector loss (потеря соединителя)", unit: "дБ", dirs: ["upper", "interval"] },
+    { id: "reflectance", title: "Reflectance (отражение)", unit: "дБ", dirs: ["upper", "interval"] },
+    { id: "slope", title: "Slope (затухание)", unit: "дБ/км", dirs: ["upper", "interval"] },
+    { id: "total_loss", title: "Total loss (потери линии)", unit: "дБ", dirs: ["upper", "interval"] },
+    { id: "total_orl", title: "Total ORL", unit: "дБ", dirs: ["lower", "interval"], nonneg: true },
+    { id: "fiber_length", title: "Fiber length (длина волокна)", unit: "м", dirs: ["lower", "upper", "interval"], nonneg: true }
+  ];
+  var METRIC_BY_ID = {}; METRICS.forEach(function (m) { METRIC_BY_ID[m.id] = m; });
+  var LIMIT_KEYS = ["warn_low", "fail_low", "warn_high", "fail_high"];
+
+  function wavelengthKey(nm) {
+    if (nm === null || nm === undefined || !isFinite(nm) || nm <= 0) return null;
+    return String(round(nm, 3));
+  }
+  function newProfile(name) {
+    var p = { name: name || "Пользовательский профиль 1", checksEnabled: true, rules: {}, limits: {} };
+    METRICS.forEach(function (m) { p.rules[m.id] = { enabled: true, direction: m.dirs[0] }; });
+    return p;
+  }
+  function relevantKeys(dir) { return { upper: ["warn_high", "fail_high"], lower: ["warn_low", "fail_low"], interval: LIMIT_KEYS }[dir]; }
+  function validateLimits(metricId, dir, v) {
+    var m = METRIC_BY_ID[metricId], errors = [];
+    if (m.dirs.indexOf(dir) < 0) return ["направление недопустимо"];
+    var keys = relevantKeys(dir), any = false;
+    keys.forEach(function (k) {
+      var x = v[k];
+      if (x !== null && x !== undefined) {
+        any = true;
+        if (!isFinite(x)) errors.push("значение должно быть конечным числом");
+        if (m.nonneg && x < 0) errors.push("значение не может быть отрицательным");
+      }
+    });
+    if (errors.length || !any) return errors;
+    function has(k) { return v[k] !== null && v[k] !== undefined; }
+    if (dir === "upper") { if (has("warn_high") && has("fail_high") && v.warn_high > v.fail_high) errors.push("предупредительный порог должен быть не больше аварийного"); }
+    else if (dir === "lower") { if (has("warn_low") && has("fail_low") && v.warn_low < v.fail_low) errors.push("предупредительный порог должен быть не меньше аварийного"); }
+    else {
+      var lows = ["fail_low", "warn_low"].filter(has).map(function (k) { return v[k]; });
+      var highs = ["warn_high", "fail_high"].filter(has).map(function (k) { return v[k]; });
+      if (!lows.length || !highs.length) errors.push("для интервала нужен хотя бы один нижний и один верхний порог");
+      if (has("fail_low") && has("warn_low") && v.fail_low > v.warn_low) errors.push("нижний аварийный порог должен быть не больше нижнего предупредительного");
+      if (has("warn_high") && has("fail_high") && v.warn_high > v.fail_high) errors.push("верхний предупредительный порог должен быть не больше верхнего аварийного");
+      if (lows.length && highs.length && Math.max.apply(null, lows) >= Math.min.apply(null, highs)) errors.push("нижние пороги должны быть меньше верхних");
+    }
+    return errors;
+  }
+  function limitText(dir, v, unit) {
+    function f(x) { return x === null || x === undefined ? "—" : fmtG(x); }
+    if (dir === "upper") return "≤ " + f(v.warn_high) + " предупр., ≤ " + f(v.fail_high) + " авар. " + unit;
+    if (dir === "lower") return "≥ " + f(v.warn_low) + " предупр., ≥ " + f(v.fail_low) + " авар. " + unit;
+    return "авар. [" + f(v.fail_low) + "; " + f(v.fail_high) + "], предупр. [" + f(v.warn_low) + "; " + f(v.warn_high) + "] " + unit;
+  }
+  function check(metricId, status, value, wl, limit, reason) { return { metric: metricId, status: status, value: value, wl: wl, limit: limit, reason: reason }; }
+  function describe(c) {
+    var m = METRIC_BY_ID[c.metric];
+    var val = c.value === null || c.value === undefined ? "—" : c.value.toFixed(3) + " " + m.unit;
+    return m.title + ": " + STATUS_TEXT[c.status] + ". Значение: " + val + "; порог: " + c.limit + "; длина волны: " +
+      (c.wl ? c.wl + " нм" : "не определена") + "; причина: " + c.reason;
+  }
+  function evaluate(profile, metricId, value, wavelength, missingReason) {
+    var m = METRIC_BY_ID[metricId], wl = wavelengthKey(wavelength);
+    function nd(reason, lt) { return check(metricId, Status.NO_DATA, value, wl, lt || "не применяется", reason); }
+    if (!profile) return nd("профиль не выбран");
+    if (!profile.checksEnabled) return nd("все проверки отключены в профиле");
+    var rule = profile.rules[metricId];
+    if (!rule.enabled) return nd("критерий выключен");
+    if (value === null || value === undefined || !isFinite(value)) return nd(missingReason || "величина отсутствует в данных");
+    if (wl === null) return nd("длина волны трассы не определена — настроить");
+    var v = (profile.limits[wl] || {})[metricId];
+    var keys = relevantKeys(rule.direction);
+    if (!v || keys.every(function (k) { return v[k] === null || v[k] === undefined; })) return nd("для " + wl + " нм порог не задан — настроить");
+    if (validateLimits(metricId, rule.direction, v).length) return nd("пороги заданы некорректно");
+    var text = limitText(rule.direction, v, m.unit), st = Status.PASS, reason = "в пределах порогов";
+    function has(k) { return v[k] !== null && v[k] !== undefined; }
+    if (rule.direction === "upper" || rule.direction === "interval") {
+      if (has("fail_high") && value > v.fail_high) { st = Status.FAIL; reason = "больше аварийного порога " + fmtG(v.fail_high); }
+      else if (has("warn_high") && value > v.warn_high) { st = Status.WARN; reason = "больше предупредительного порога " + fmtG(v.warn_high); }
+    }
+    if (st === Status.PASS && (rule.direction === "lower" || rule.direction === "interval")) {
+      if (has("fail_low") && value < v.fail_low) { st = Status.FAIL; reason = "меньше аварийного порога " + fmtG(v.fail_low); }
+      else if (has("warn_low") && value < v.warn_low) { st = Status.WARN; reason = "меньше предупредительного порога " + fmtG(v.warn_low); }
+    }
+    return check(metricId, st, value, wl, text, reason);
+  }
+  function combine(list) {
+    var s = list.map(function (c) { return c.status; });
+    if (s.indexOf("fail") >= 0) return "fail";
+    if (s.indexOf("warn") >= 0) return "warn";
+    if (s.indexOf("pass") >= 0) return "pass";
+    return "no_data";
+  }
+
+  // ------------------------------------------------------------ order
+  function physicalOrder(m) {
+    var valid = [], invalid = [];
+    m.events.forEach(function (e, i) { (isFinite(e.distance) ? valid : invalid).push(i); });
+    valid.sort(function (a, b) { return m.events[a].distance - m.events[b].distance || a - b; });
+    return { valid: valid, invalid: invalid };
+  }
+  function endOfFiberIndex(m, ordered) {
+    for (var i = 0; i < ordered.length; i++) if (isEndOfFiber(m.events[ordered[i]])) return ordered[i];
+    return null;
+  }
+
+  // ------------------------------------------------------------ losses
+  var SOURCE_SECTION = "расчёт: затухание из SOR (lead-in slope события в конце участка) × длина участка";
+  function V(value, reason, estimate) { return { value: value === undefined ? null : value, reason: reason || "", estimate: !!estimate }; }
+  function coefficient(slope) {
+    if (slope === null || slope === undefined || !isFinite(slope)) return V(null, "затухание участка отсутствует в SOR");
+    if (slope === 0) return V(null, "в SOR записано 0.000 дБ/км — затухание участка не задано");
+    if (slope < 0) return V(null, "в SOR отрицательное затухание " + slope.toFixed(3) + " дБ/км — недостоверно");
+    return V(slope, SOURCE_SECTION);
+  }
+  function sectionLoss(slope, length) {
+    if (length === null || length === undefined || !isFinite(length) || length <= 0) return V(null, "длина участка не определена");
+    var k = coefficient(slope);
+    if (k.value === null) return k;
+    return V(k.value * length / 1000, SOURCE_SECTION);
+  }
+  function buildProfile(m) {
+    var o = physicalOrder(m).valid, eof = endOfFiberIndex(m, o);
+    var used = eof === null ? o : o.slice(0, o.indexOf(eof) + 1);
+    var start = Math.max(m.fiberStart !== null && m.fiberStart !== undefined ? m.fiberStart : 0, 0);
+    var prof = { segments: [], events: used, eof: eof, fiberStart: start };
+    var prev = start, label = "начало волокна";
+    used.forEach(function (idx) {
+      var e = m.events[idx], d = e.distance;
+      if (d > prev + 0.5) prof.segments.push({ start: prev, end: d, slope: coefficient(e.slope), endEvent: idx, label: label + " → событие №" + e.number });
+      prev = Math.max(prev, d); label = "событие №" + e.number;
+    });
+    return prof;
+  }
+  function eventLoss(m, idx) {
+    var e = m.events[idx];
+    if (isEndOfFiber(e)) return V(0, "конец волокна: потеря события не учитывается");
+    if (e.loss === null || e.loss === undefined || !isFinite(e.loss)) return V(null, "потеря события №" + e.number + " отсутствует в SOR");
+    return V(e.loss, "записано в SOR");
+  }
+  function lossBetween(m, prof, a, b, includeAt) {
+    if (!isFinite(a) || !isFinite(b) || b < a) return V(null, "границы не определены");
+    if (prof.eof !== null && b > m.events[prof.eof].distance + 1e-6) return V(null, "граница за событием «конец волокна» — потери не определены");
+    var total = 0, eps = 1e-6, i;
+    if (includeAt !== null && includeAt !== undefined) {
+      var v0 = eventLoss(m, includeAt); if (v0.value === null) return v0; total += v0.value;
+    }
+    for (i = 0; i < prof.segments.length; i++) {
+      var s = prof.segments[i], lo = Math.max(s.start, a), hi = Math.min(s.end, b);
+      if (hi - lo <= eps) continue;
+      if (s.slope.value === null) return V(null, "участок " + s.label + ": " + s.slope.reason);
+      total += s.slope.value * (hi - lo) / 1000;
+    }
+    if (prof.segments.length && a < prof.segments[0].start - eps && b > a + eps) return V(null, "граница раньше начала волокна — затухание до начала не задано");
+    for (i = 0; i < prof.events.length; i++) {
+      var d = m.events[prof.events[i]].distance;
+      if (a + eps < d && d < b - eps) { var v = eventLoss(m, prof.events[i]); if (v.value === null) return v; total += v.value; }
+    }
+    return V(total, SOURCE_SECTION + " + потери событий из SOR");
+  }
+  function fullFiberCheck(m, prof) {
+    prof = prof || buildProfile(m);
+    var rec = m.totalLoss;
+    if (prof.eof === null) return { computed: V(null, "нет события «конец волокна»"), recorded: rec, diff: null, tol: null, text: "сверка невозможна: в SOR нет события «конец волокна»" };
+    var end = m.events[prof.eof].distance, first = prof.events.length ? prof.events[0] : null;
+    var include = first !== null && m.events[first].distance <= prof.fiberStart + 0.5 ? first : null;
+    var c = lossBetween(m, prof, prof.fiberStart, end, include);
+    if (c.value === null) return { computed: c, recorded: rec, diff: null, tol: null, text: "сумма составляющих не рассчитана: " + c.reason };
+    if (rec === null || rec === undefined) return { computed: c, recorded: null, diff: null, tol: null, text: "в SOR нет Total loss для сверки" };
+    var tol = 0.0005 * (end - prof.fiberStart) / 1000 + 0.0005 * (prof.events.length + 1);
+    var diff = c.value - rec, text;
+    if (Math.abs(diff) <= tol) text = "сумма составляющих " + c.value.toFixed(3) + " дБ совпадает с Total loss прибора " + rec.toFixed(3) + " дБ в пределах округления (±" + tol.toFixed(3) + " дБ)";
+    else text = "сумма составляющих " + c.value.toFixed(3) + " дБ отличается от Total loss прибора " + rec.toFixed(3) + " дБ на " + (diff >= 0 ? "+" : "") + diff.toFixed(3) + " дБ: прибор определил итог другим способом (например, по уровням трассы). Потери участков — оценка по коэффициентам затухания из SOR";
+    return { computed: c, recorded: rec, diff: diff, tol: tol, text: text };
+  }
+  function makeContext(m, allowEstimates) {
+    var prof = buildProfile(m), chk = fullFiberCheck(m, prof);
+    var ctx = { m: m, profile: prof, check: chk, allowEstimates: !!allowEstimates };
+    ctx.trusted = chk.diff !== null && Math.abs(chk.diff) <= chk.tol;
+    ctx.gate = function (v) {
+      if (v.value === null || ctx.trusted) return v;
+      if (ctx.allowEstimates) return V(v.value, "ОЦЕНКА, не подтверждена прибором: " + chk.text, true);
+      return V(null, "не рассчитано: " + chk.text);
+    };
+    return ctx;
+  }
+  function cumulativeAt(ctx, span, pos, atBeginEvent) {
+    if (!span || !span.valid) return V(null, "Span некорректен");
+    var eps = 1e-6;
+    if (pos < span.begin - eps) return V(null, "до начала Span");
+    if (pos > span.end + eps) return V(null, "за концом Span");
+    if (atBeginEvent || Math.abs(pos - span.begin) <= eps) return ctx.gate(V(0, "начало Span"));
+    var include = null;
+    if (span.includeBegin) {
+      if (span.beginEvent === null) return V(null, "Include Begin loss: начало Span не совпадает с событием — потеря начала не определена");
+      include = span.beginEvent;
+    }
+    return ctx.gate(lossBetween(ctx.m, ctx.profile, span.begin, pos, include));
+  }
+  function spanTotal(ctx, span) {
+    if (!span || !span.valid) return V(null, "Span некорректен");
+    var v = cumulativeAt(ctx, span, span.end);
+    if (v.value === null) return v;
+    var total = v.value, reason = v.reason;
+    if (span.includeEnd) {
+      if (span.endEvent === null) return V(null, "Include End loss: конец Span не совпадает с событием — потеря конца не определена");
+      if (isEndOfFiber(ctx.m.events[span.endEvent])) reason += "; Include End loss: конец Span — «конец волокна», его потеря (спад в шум) не учитывается";
+      else { var e = eventLoss(ctx.m, span.endEvent); if (e.value === null) return e; total += e.value; }
+    }
+    return V(total, reason, v.estimate);
+  }
+
+  // ------------------------------------------------------------ span
+  function defaultSpanSettings() {
+    return { beginEnabled: false, beginMode: "index", beginIndex: 1, beginLength: 0,
+      endEnabled: false, endMode: "reverse_index", endIndex: 1, endLength: 0, includeBegin: false, includeEnd: false };
+  }
+  function reverseReference(m) {
+    var o = physicalOrder(m).valid, eof = endOfFiberIndex(m, o);
+    return eof === null ? o : o.slice(0, o.indexOf(eof) + 1);
+  }
+  function computeSpan(m, s, ctx) {
+    var r = { valid: false, errors: [], begin: null, end: null, beginText: "", endText: "", beginEvent: null, endEvent: null,
+      includeBegin: s.includeBegin, includeEnd: s.includeEnd, boundaryLoss: null, boundaryText: "", total: null, totalEstimate: false, totalText: "не рассчитано" };
+    var o = physicalOrder(m).valid, ref = reverseReference(m), ev = m.events;
+    var x0 = m.distance[0], x1 = m.distance[m.distance.length - 1];
+    if (!s.beginEnabled) {
+      if (o.length) { r.beginEvent = o[0]; r.begin = ev[o[0]].distance; r.beginText = "событие №" + ev[o[0]].number + " (первое событие)"; }
+      else { r.begin = x0; r.beginText = "начало трассы"; }
+    } else if (s.beginMode === "index") {
+      if (s.beginIndex >= 1 && s.beginIndex <= o.length) { var bi = o[s.beginIndex - 1]; r.beginEvent = bi; r.begin = ev[bi].distance; r.beginText = "Index " + s.beginIndex + ": событие №" + ev[bi].number; }
+      else r.errors.push("Index начала " + s.beginIndex + " вне диапазона 1…" + o.length);
+    } else {
+      if (!isFinite(s.beginLength) || s.beginLength < 0) r.errors.push("длина запускного шнура должна быть ≥ 0");
+      else { r.begin = s.beginLength; r.beginText = "Length: " + s.beginLength.toFixed(3) + " м от начала"; }
+    }
+    if (!s.endEnabled) {
+      if (ref.length) { var ei = ref[ref.length - 1]; r.endEvent = ei; r.end = ev[ei].distance; r.endText = "событие №" + ev[ei].number + " (" + (isEndOfFiber(ev[ei]) ? "конец волокна" : "последнее событие") + ")"; }
+      else { r.end = x1; r.endText = "конец трассы"; }
+    } else if (s.endMode === "reverse_index") {
+      if (s.endIndex >= 1 && s.endIndex <= ref.length) { var ej = ref[ref.length - s.endIndex]; r.endEvent = ej; r.end = ev[ej].distance; r.endText = "Reverse Index " + s.endIndex + ": событие №" + ev[ej].number; }
+      else r.errors.push("Reverse Index конца " + s.endIndex + " вне диапазона 1…" + ref.length);
+    } else {
+      var eof = endOfFiberIndex(m, o);
+      if (!isFinite(s.endLength) || s.endLength < 0) r.errors.push("длина приёмного шнура должна быть ≥ 0");
+      else if (eof === null) r.errors.push("в SOR нет события «конец волокна» — Reverse Length не определён");
+      else { r.end = ev[eof].distance - s.endLength; r.endText = "Reverse Length: " + s.endLength.toFixed(3) + " м до конца волокна"; }
+    }
+    [["начало", r.begin], ["конец", r.end]].forEach(function (p) {
+      if (p[1] !== null && !(x0 <= p[1] && p[1] <= x1)) r.errors.push(p[0] + " Span " + p[1].toFixed(3) + " м вне трассы");
+    });
+    if (r.begin !== null && r.end !== null && !(r.begin < r.end)) r.errors.push("начало Span должно быть меньше конца");
+    r.valid = !r.errors.length && r.begin !== null && r.end !== null;
+    r.length = r.valid ? r.end - r.begin : null;
+    // boundary losses (recorded only), as desktop
+    var parts = [], tot = 0, missing = [];
+    [["начала", s.includeBegin, r.beginEvent], ["конца", s.includeEnd, r.endEvent]].forEach(function (p) {
+      if (!p[1]) return;
+      var loss = p[2] === null ? null : ev[p[2]].loss;
+      if (loss === null || loss === undefined) missing.push(p[0] + (p[2] === null ? " (граница не совпадает с событием)" : ""));
+      else { tot += loss; parts.push(p[0] + " " + loss.toFixed(3) + " дБ"); }
+    });
+    if (!r.valid) r.boundaryText = "Span некорректен";
+    else if (!(s.includeBegin || s.includeEnd)) r.boundaryText = "граничные потери не включены";
+    else if (missing.length) r.boundaryText = "не рассчитано: нет потери события " + missing.join(", ");
+    else { r.boundaryLoss = tot; r.boundaryText = tot.toFixed(3) + " дБ (" + parts.join(" + ") + ", значения из SOR)"; }
+    ctx = ctx && ctx.m === m ? ctx : makeContext(m);
+    var t = spanTotal(ctx, r);
+    if (t.value !== null) { r.total = t.value; r.totalEstimate = t.estimate; r.totalText = (t.estimate ? "≈ " : "") + t.value.toFixed(3) + " дБ — " + t.reason; }
+    else r.totalText = t.reason.indexOf("не рассчитано") === 0 ? t.reason : "не рассчитано: " + t.reason;
+    return r;
+  }
+
+  // ------------------------------------------------------------ rows
+  var REPAIR_TEXT = { warn: "Проверить соединение", fail: "Проверить соединение / возможен ремонт" };
+  function recordedReflectance(e) {
+    var r = e.refl;
+    if (r === null || r === undefined || !isFinite(r)) return [null, "отражение отсутствует в SOR"];
+    if (r === 0 && reflectionClass(e) === "non-reflective") return [null, "неотражающее событие: в SOR 0.000 дБ — отражение не измерено"];
+    return [r, "отражение отсутствует в SOR"];
+  }
+  function kindText(e) {
+    var t = { "non-reflective": "неотражающее", "reflective": "отражающее", "saturated-reflective": "отражающее (насыщение)" }[reflectionClass(e)] || "не распознано";
+    return isEndOfFiber(e) ? t + ", конец волокна" : t;
+  }
+  function eventChecks(e, profile, wl) {
+    var checks = [], cls = reflectionClass(e);
+    if (isEndOfFiber(e)) { var r0 = "конец волокна: потеря события не оценивается"; checks.push(evaluate(profile, "splice_loss", null, wl, r0), evaluate(profile, "connector_loss", null, wl, r0)); }
+    else if (cls === "non-reflective") checks.push(evaluate(profile, "splice_loss", e.loss, wl, "потеря отсутствует в SOR"), evaluate(profile, "connector_loss", null, wl, "неотражающее событие — не соединитель"));
+    else if (cls) checks.push(evaluate(profile, "splice_loss", null, wl, "отражающее событие — не сварка"), evaluate(profile, "connector_loss", e.loss, wl, "потеря отсутствует в SOR"));
+    else { var r1 = "тип события в SOR не распознан (сварка/соединитель)"; checks.push(evaluate(profile, "splice_loss", null, wl, r1), evaluate(profile, "connector_loss", null, wl, r1)); }
+    var rr = recordedReflectance(e);
+    checks.push(evaluate(profile, "reflectance", rr[0], wl, rr[1]));
+    return { checks: checks, cells: { loss: cls === "non-reflective" ? checks[0] : checks[1], reflectance: checks[2] } };
+  }
+  function repair(row) {
+    var f = [row.cells.loss, row.cells.reflectance].filter(function (c) { return c && (c.status === "warn" || c.status === "fail"); });
+    if (!f.length) return;
+    row.repairStatus = f.some(function (c) { return c.status === "fail"; }) ? "fail" : "warn";
+    row.repairText = REPAIR_TEXT[row.repairStatus];
+    row.repairReasons = f.map(describe);
+  }
+  function sectionSlope(next) {
+    if (next.slope === null || next.slope === undefined) return [null, "затухание отсутствует в SOR"];
+    if (next.slope === 0) return [null, "в SOR записано 0.000 дБ/км — трактуется как «не задано»"];
+    return [next.slope, "из SOR: lead-in slope события в конце участка"];
+  }
+  function buildRows(m, profile, ctx, span) {
+    ctx = ctx && ctx.m === m ? ctx : makeContext(m);
+    span = span || computeSpan(m, defaultSpanSettings(), ctx);
+    var wl = m.wavelength, po = physicalOrder(m), valid = po.valid, eof = endOfFiberIndex(m, valid);
+    var eofD = eof === null ? null : m.events[eof].distance, rows = [];
+    function cum(row, pos, atEvent) {
+      if (eofD !== null && pos > eofD + 1e-6) { row.cumNote = "за событием «конец волокна» — потери не определены"; return; }
+      var v = cumulativeAt(ctx, span, pos, atEvent !== null && atEvent === span.beginEvent);
+      row.cum = v.value; row.cumEstimate = v.estimate; row.cumNote = v.reason;
+    }
+    function eventRow(idx, from) {
+      var e = m.events[idx], rr = recordedReflectance(e);
+      var row = { kind: "event", num: String(e.number), type: kindText(e), from: from, loss: e.loss, refl: rr[0], comment: e.comment,
+        note: "", eventIndex: idx, cum: null, cumNote: "", cumEstimate: false, repairStatus: null, repairText: "", repairReasons: [] };
+      if (rr[0] === null && e.refl !== null && e.refl !== undefined) row.note = rr[1];
+      var ec = eventChecks(e, profile, wl); row.checks = ec.checks; row.cells = ec.cells; row.status = combine(ec.checks);
+      repair(row);
+      return row;
+    }
+    valid.forEach(function (idx, pos) {
+      var e = m.events[idx], row = eventRow(idx, e.distance);
+      if (eofD !== null && e.distance > eofD) row.note = ["за событием «конец волокна»", row.note].filter(Boolean).join("; ");
+      cum(row, e.distance, idx);
+      rows.push(row);
+      if (pos + 1 < valid.length) {
+        var nx = m.events[valid[pos + 1]], len = nx.distance - e.distance;
+        var sec = { kind: "section", num: "У" + (pos + 1), type: "Участок " + e.number + "→" + nx.number, from: e.distance, to: nx.distance,
+          length: null, slope: null, secLoss: null, secNote: "", secEstimate: false, cum: null, cumNote: "", cumEstimate: false, note: "", checks: [], cells: {} };
+        if (len <= 0) { sec.note = "совпадающие координаты событий — длина участка не определяется"; sec.checks = [evaluate(profile, "slope", null, wl, "участок нулевой длины")]; }
+        else {
+          sec.length = len;
+          var ss = sectionSlope(nx); sec.slope = ss[0]; sec.note = ss[1];
+          if (eofD !== null && e.distance >= eofD) sec.note += "; участок за концом волокна";
+          sec.checks = [evaluate(profile, "slope", ss[0], wl, ss[1])]; sec.cells = { slope: sec.checks[0] };
+          if (eofD !== null && e.distance >= eofD) { sec.secNote = "участок за концом волокна — потери не определены"; sec.cumNote = sec.secNote; }
+          else {
+            var v = ctx.gate(sectionLoss(nx.slope, len)); sec.secLoss = v.value; sec.secEstimate = v.estimate; sec.secNote = v.reason;
+            if (span.valid && nx.distance <= span.begin + 1e-6) sec.cumNote = "участок до начала Span";
+            else cum(sec, nx.distance, null);
+            if (sec.cum !== null) sec.cumNote = "до конца участка (без потери события №" + nx.number + "): " + sec.cumNote;
+          }
+        }
+        sec.status = combine(sec.checks);
+        rows.push(sec);
+      }
+    });
+    po.invalid.forEach(function (idx) {
+      var row = eventRow(idx, null); row.note = "координата события некорректна — участки не строятся"; row.cumNote = "координата события некорректна"; rows.push(row);
+    });
+    return rows;
+  }
+  function traceChecks(m, profile) {
+    var wl = m.wavelength, orl = m.orl, orlR = "ORL отсутствует в SOR";
+    if (orl !== null && orl === 0) { orl = null; orlR = "в SOR записано ORL 0.000 дБ — трактуется как «не задано»"; }
+    var len = m.fiberLength, lenR = "длина волокна отсутствует в SOR";
+    if (len !== null && len <= 0) { len = null; lenR = "в SOR длина волокна ≤ 0 — не задана"; }
+    return [evaluate(profile, "total_loss", m.totalLoss, wl, "потери линии отсутствуют в SOR"),
+      evaluate(profile, "total_orl", orl, wl, orlR), evaluate(profile, "fiber_length", len, wl, lenR)];
+  }
+
+  var api = { parseSor: parseSor, parseBlocks: parseBlocks, reflectionClass: reflectionClass, isEndOfFiber: isEndOfFiber,
+    Status: Status, STATUS_TEXT: STATUS_TEXT, DEFAULT_PALETTE: DEFAULT_PALETTE, METRICS: METRICS, METRIC_BY_ID: METRIC_BY_ID,
+    wavelengthKey: wavelengthKey, newProfile: newProfile, validateLimits: validateLimits, evaluate: evaluate, combine: combine,
+    describe: describe, physicalOrder: physicalOrder, sectionLoss: sectionLoss, makeContext: makeContext, fullFiberCheck: fullFiberCheck,
+    cumulativeAt: cumulativeAt, spanTotal: spanTotal, defaultSpanSettings: defaultSpanSettings, computeSpan: computeSpan,
+    buildRows: buildRows, traceChecks: traceChecks, recordedReflectance: recordedReflectance, REPAIR_TEXT: REPAIR_TEXT,
+    reverseReference: reverseReference, version: "M1 (ядро 0.4.0)" };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.STV = api;
+})(typeof window !== "undefined" ? window : this);
+
+</script>
+<script>
+var SAMPLE_B64 = "TWFwAMgAqgAAAAsAR2VuUGFyYW1zAMgASgAAAFN1cFBhcmFtcwDIAEgAAABGeGRQYXJhbXMAyABcAAAAS2V5RXZlbnRzAMgApgAAAE5ldFRlc3RUU0kgAMgA7ggAAERhdGFQdHMAyABWnAAAQVJTcGVjaWFsANIA6AAAAEFSRXZlbnQAyAByAAAAV2F2ZU1UU1BhcmFtcwDIAJACAABDa3N1bQDIAAgAAABHZW5QYXJhbXMARU5Vbml0X00gAE1PMTgzAIwCHgVTRS1GQVdFUiAAU0UtRkFXRVItQ0xTMjYgACAAT1QAAAAAAAAAAFJvYgAgAFN1cFBhcmFtcwBBTlJJVFNVAE1UOTA5MEEANjI2MjA5ODc5NyAATVU5MDkwMTRCLTA1NgA2MjYyMTE3ODI1IAAzLjAyIAAgAEZ4ZFBhcmFtcwAWbuVebXQsMwAAAAAAAAAAAQBkAD3RAwAhTgAAFj0CAFgCADwAAB4AeqIHAAAAAAD0AQAAH8voAwAAMgBAnIA4U1QAAAAAAAAAAAAAAAAAAAAAS2V5RXZlbnRzAAMAAgAzwQAAQQGyAZR6//8xRjk5OTkyUDPBAAAzwQAAY8oAAPnKAAAzwQAAIAADAMAwBQAvAVcADH7//zFGOTk5OTJQwDAFAMAwBQA9PgUA0z4FAMAwBQAgAAQAWfYFAHoBdDWuDwAAMUU5OTk5MlBZ9gUAWfYFADqWBgDQlgYAWfYFACAA2gsAAAAAAABZ9gUAAAAAAAAAAAAAAE5ldFRlc3RUU0kgADxUNj7aCE5OAAAREwEAAAAAAAAAZQAAAMEEAAAFCnqiBwAFNyFOAAAFJQEAAAANJgAAAADcYhYAAHls/AcnTQBNAAAAEQBBAE4AUgBJAFQAUwBVAAAAEQFNAFQAOQAwADkAMABBAAAAHQNNAFUAOQAwADkAMAAxADQAQgAtADAANQA2AAAAFwQ2ADIANgAyADEAMQA3ADgAMgA1AAAACwUzAC4AMAAyAAAAFwY2ADIANgAyADAAOQA4ADcAOQA3AAAABwdUADYAAAATPVMARQAtAEYAQQBXAEUAUgAAAB8+UwBFAC0ARgBBAFcARQBSAC0AQwBMAFMAMgA2AAAAD0NVAG4AaQB0AF8ATQAAAAVGAQAAAAkIwObOB8DmzgcFSQAAAAAFCYmxmAAFCwEAAAANDAMAAAAAPAAAHgAAAAUNAIeTAxkO5AcAAAYAAAAOAAAAAAAAABcAAAAyAAAADQ8WbuVeAAAAAAAAAAAVYQEAAAADAAAAAAAAAAAAAAAAAAAADRBQwwAAAKad/QC0xAQNSGMAAAAAAAAAAKad/QVfAAAAgCViAQAAAAcAAADAxi0AgI1bAEBUiQAAG7cAwOHkAICoEgFAb0ABIWsHAAAAAAAAgAAAAIAgs4EAAAAAgAAAAIAAAACAAAAAgAVjIU4AAA1PAAAAAAAAAAAAAAAACRQAACAABgAAAAVHBAAAABEVAAAAAIgHAABZJi41AADb5RUWFAAAAAAALk4AADGNAAAAAACHkwMVFnrg///A35UuAADxbGhcxgFo41kFFRYhDgAAQ588XAAAdCwI0N8BCFdzBRUWFAAAAAAAFAAAAAAAAAAAAAAAAAAJFwcAAAADAAAAERiA5fn/AAAAACL0EwCiDhoAERgAAAAAAAAAAAAAAAAAAAAAERgAAAAAgBoGAIDl+f8AAAAAERgAAAAAAAAAAAAAAAAAAAAAERgAAAAAgBoGAIDl+f8AAAAAERgAAAAAAAAAAAAAAAAAAAAAERhoAAAAeAAAANQkTUDUJE1ABRwBAAAADR0AAAAAZAAAAAAAAAAFJOjlBAAFKQQAAAARKgAAAAAUAAAAAABnAAAAAAAVKwAAAAAAAAAAAEAAAAAAAAAAAAAADSwoAAAAAAApAAAAAAANLQAAAAAAAAAAAAAAAA0uAAAAAAAAAAAAAAAACTAAAAAAOINB/hEqAQAAAM0HAAAAACgIAAAAABUr+p0GACHS9v0MQAAAAAAAAAYAAAANLOAHAAAAAOAHAAAAAA0tAAAAAAAAAAAAAAAADS5eAAAAAABkAAAAAAAJMAAAAACnIkj+ESoBAAAAMTUAAAAAuDUAAAAAFSvIUwEApF8E/gxAAAAAAAAABgAAAA0sRTUAAAAARTUAAAAADS0AAAAAAAAAAAAAAAANLooAAAAAAJAAAAAAAAkwAAAAABPhJf4RKgQAAAAXPQAAAAD3RAAAAAAVK5zL0AD4QD0ADkAAIAAAAAAGAAAADSwqPQAAAAArPQAAAAANLQAAAAAAAAAAAAAAAA0uZAYAAAAAagYAAAAACTAAAAAAVXMs/gMx83oFMiIAAAAgMwAAAA0AIAAgACAATABhAG4AZwB1AGEAZwBlADoAAAAMMwAADQICRQBOAAAAIDMAAQANACAAIAAgAEMAYQBiAGwAZQAgAEkARAA6AAAAFDMAAQ0kA1UAbgBpAHQAXwBNAAAAIDMAAgANACAAIAAgAEYAaQBiAGUAcgAgAEkARAA6AAAAEjMAAg0kBE0ATwAxADgAMwAAACAzAAMADQAgAFcAYQB2AGUAbABlAG4AZwB0AGgAOgAAABAzAAMNBQ4xADMAMQAwAAAAIDMABAANACAAIAAgAE8AcgBnAC4AIABMAG8AYwA6AAAAGDMABA0kBlMARQAtAEYAQQBXAEUAUgAAACAzAAUADQAgACAAVABlAHIAbQAuACAATABvAGMAOgAAACQzAAUNJAdTAEUALQBGAEEAVwBFAFIALQBDAEwAUwAyADYAAAAgMwAGAA0AIABDAGEAYgBsAGUAIABDAG8AZABlADoAAAAIMwAGDSQCAAAgMwAHAA0AIAAgAEMAbwBuAGQAaQB0AGkAbwBuADoAAAAMMwAHDQICTwBUAAAAIDMACAANACAAIAAgAE8AcABlAHIAYQB0AG8AcgA6AAAADjMACA0kAlIAbwBiAAAAIDMACQANACAAIAAgACAAQwBvAG0AbQBlAG4AdAA6AAAACDMACQ0kAgAAIDMACgANACAAIAAgAFMAdQBwAHAAbABpAGUAcgA6AAAAFjMACg0kD0EATgBSAEkAVABTAFUAAAAgMwALAA0AIABPAFQARABSACAATQBvAGQAZQBsADoAAAAWMwALDSQQTQBUADkAMAA5ADAAQQAAACAzAAwADQAgACAAIAAgACAAIAAgACAAUwAvAE4AOgAAABwzAAwNJAI2ADIANgAyADAAOQA4ADcAOQA3AAAAIDMADQANACAATwBwAHQAaQBjAHMAIABNAG8AZAA6AAAAIjMADQ0kEU0AVQA5ADAAOQAwADEANABCAC0AMAA1ADYAAAAgMwAOAA0AIAAgACAAIAAgACAAIAAgAFMALwBOADoAAAAcMwAODSQSNgAyADYAMgAxADEANwA4ADIANQAAACAzAA8ADQAgACAAIABTAC8AVwAgAFIAZQB2AC4AOgAAABAzAA8NJBMzAC4AMAAyAAAAIDMAEAANACAAIAAgACAAIAAgAE8AdABoAGUAcgA6AAAACDMAEA0kAgAABTQBAAAACzUAAAAA6AMAAAAABTjoAwAACTkUAAAAAAATeDNMIAAgACAAMAAuADAAMAAwADAAMAAwADAAMAAwADAAMAAwADAAMAAwAEUAKwAwADAAAAAzTSAAIAAgADAALgAwADAAMAAwADAAMAAwADAAMAAwADAAMAAwADAAMABFACsAMAAwAAAAGToAAAAAAAB6UONUiF21YT5lzGcxalds4m0FO89JAAAFWAAAAAAFXVHFYOoFXgAAAAD//0RhdGFQdHMAIU4AAAEAIU4AAOgD//+Frxyrd6JKnsGaM5jOlaiTHZKnkGuPNI4kjTuMY4uWisCJ8YhjiOyHGocLhUaCt3/HfVF8QHtweuZ5bXkNecl4hHhZeEJ4KXgReAN47Hfjd/F3O3jleNt5wXqge3l8Kn3PfV9+5H5df9V/PICMgOyAQIGSgd6BMoJ0graC8oIog2ODmIPJg/SDEIQfhDWEQIRShFiEXYRshG+Ee4SGhI+EmISfhKWErISxhLeEu4TAhMSEyITNhNGE1oTbhOCE5YTqhO6E9IT4hP2EAYUFhQiFDIUPhRKFFYUXhRmFG4UbhRyFHIUbhRuFGoUZhRiFF4UXhReFFoUWhRWFFIUUhRSFFIUVhRWFFoUXhRiFGYUahRuFHYUdhR6FHoUehR+FIIUghSCFIIUghSCFH4UfhR6FHoUdhRyFG4UbhRqFGoUahRuFG4UbhRyFHIUdhR6FHoUfhSCFIYUihSOFJIUlhSaFJ4UohSmFKYUphSmFKoUqhSuFK4UrhSuFLIUshS2FLYUthS6FLoUuhS6FLoUuhS6FLoUuhS2FLYUthS2FLYUshSuFK4UrhSqFKoUqhSmFKYUohSiFKIUohSiFKIUohSmFKYUphSmFKoUqhSqFK4UrhSyFLYUthS2FLYUthS2FLYUthS6FLoUuhS+FL4UvhTCFMIUwhTCFMIUxhTGFMoUyhTOFNIU1hTWFNoU2hTaFN4U3hTaFNYU2hTaFNYU1hTWFNYU1hTWFNIU0hTSFNIUzhTSFNIU0hTWFNoU3hTeFOIU4hTiFOYU5hTqFOoU8hTyFPYU+hT+FP4U/hT+FP4VAhUCFQYVBhUKFQ4VDhUSFRIVFhUWFRYVFhUWFRYVFhUWFRYVFhUSFRIVEhUOFQ4VDhUKFQoVBhUGFQIVAhUCFQIVAhUCFP4VAhUCFQIVBhUGFQYVBhUKFQoVChUOFQ4VEhUSFRYVFhUWFRYVFhUWFRYVGhUaFRoVGhUaFRoVGhUaFR4VHhUeFSIVIhUiFSYVJhUqFSoVKhUqFSoVLhUuFS4VLhUyFTIVMhUyFTIVMhUyFTIVMhUyFTIVNhUyFTYVNhU2FTYVNhU2FTYVNhU6FToVOhU+FT4VQhVCFUIVQhVCFUYVRhVGFUoVShVOFU4VThVSFVIVUhVSFVIVUhVSFVIVUhVSFVIVVhVWFVYVVhVWFVYVVhVWFVoVWhVaFVoVXhVeFV4VXhVeFV4VXhVeFV4VXhViFWIVYhViFWIVYhViFWIVYhViFWIVYhVmFWoVahVqFW4VchVyFXYVdhV6FXoVfhV+FX4VghWCFYIVhhWGFYIVhhWGFYIVghV+FXoVehV2FXIVbhVuFW4VbhVqFWoVahVqFWoVahVqFWoVahVuFXIVdhV6FX4VghWGFYYVhhWKFY4VkhWSFZYVmhWaFZ4VohWmFaYVphWmFaoVqhWuFa4VshWyFbIVthW2FbYVthW2FboVuhW6Fb4VvhW+Fb4VvhW+Fb4VvhW+Fb4VuhW6FboVuhW6FboVuhW6FboVuhW6Fb4VvhW+FboVuhW6FboVuhW+Fb4VvhW+FcIVvhW+Fb4VvhW+FcIVvhW+Fb4VvhW+Fb4VvhW+FcIVwhXCFcIVwhXCFcIVwhXCFcIVwhXCFcIVxhXGFcYVxhXKFcoVyhXOFcoVyhXKFc4VzhXOFc4VyhXKFcoVyhXKFcoVyhXOFc4VzhXOFc4V0hXSFdYV1hXaFdoV3hXeFeIV4hXmFeYV5hXmFeYV6hXqFeYV6hXmFeYV4hXiFeIV4hXiFeIV4hXiFeIV5hXmFeYV6hXuFe4V8hX2FfYV+hX+FgIWBhYGFgoWDhYOFhIWEhYSFhIWEhYSFhIWEhYSFg4WDhYOFgoWChYKFgoWChYKFgoWDhYOFg4WDhYSFg4WEhYOFg4WDhYOFg4WDhYOFg4WDhYOFg4WChYKFgYWBhYCFf4V/hX+Ff4V/hX+FfoV+hX6FfYV9hX2FfYV9hXyFfIV8hXyFfIV9hX2FfoV+hX+Ff4WAhYCFgYWChYKFgoWDhYSFhYWGhYaFhoWHhYaFh4WHhYeFh4WHhYeFh4WHhYeFh4WHhYaFhoWGhYaFhoWGhYaFh4WHhYiFiIWIhYmFioWKhYqFi4WLhYuFjIWLhYyFjYWNhY2FjYWNhY2FjYWOhY6FjoWPhZCFkYWRhZKFkoWThZSFlIWVhZWFl4WXhZiFmYWZhZmFmoWahZqFmoWahZqFmoWahZqFmoWZhZmFmYWZhZiFmIWYhZiFmIWXhZeFloWWhZaFl4WWhZaFloWWhZaFl4WXhZeFmIWZhZqFmoWbhZuFm4WdhZ2FnoWehZ+FoIWhhaGFoYWhhaGFoYWhhaGFoYWihaKFooWjhaOFo4WjhaKFoYWghaCFoIWfhZ+Fn4WfhZ+Fn4WfhZ6FnoWehZ2FnYWdhZ2FnoWehZ6Fn4WfhZ+FoIWghaCFoIWghaCFoIWghaCFoIWghaCFoIWfhZ+Fn4WghaCFn4WghaCFoIWghaCFoIWhhaGFoYWhhaGFooWihaKFooWihaOFooWjhaOFo4WjhaOFo4WkhaSFpYWlhaWFpoWnhaeFqIWphaqFqoWrhauFq4WshayFq4WrhaqFqoWphaqFqYWphamFqYWphaiFqIWohaiFqIWohaeFqIWohaiFqIWohaiFqIWohaiFp4WnhaeFpoWmhaaFpoWmhaaFpoWlhaaFpoWmhaaFpoWnhaiFqIWphaqFqoWrhauFrIWsha2FroWwhbGFsoWyhbOFtIW0hbSFtIW1hbWFtYW2hbaFtoW3hbeFt4W3hbeFt4W2hbaFtoW2hbaFtoW2hbaFtoW2hbeFtoW3hbeFt4W3hbaFtoW3hbeFt4W3hbeFt4W3hbiFt4W3hbeFt4W3hbeFt4W3hbeFt4W3hbeFt4W3hbeFuIW4hbiFuYW5hbqFuoW7hbyFvIW8hbyFvYW9hb2FvoW/hcCFwIXBhcKFw4XEhcSFxYXFhcWFxoXGhcaFx4XHhceFx4XGhcaFxYXFhcSFxIXEhcSFxIXEhcSFxIXEhcSFxYXEhcSFxYXGhceFx4XIhcmFyYXJhcqFyoXKhcqFyoXKhcmFyYXJhcmFyYXJhcmFyIXIhceFx4XGhcaFxYXEhcSFxIXEhcSFxIXEhcWFxYXFhcWFxYXFhcaFx4XIhciFyYXJhcqFyoXKhcqFyoXLhcuFzIXMhc2FzoXPhc+F0IXQhdCF0IXRhdGF0IXQhdGF0YXRhdGF0YXRhdCF0IXPhc+FzoXNhc6FzoXOhc6FzoXOhc6FzoXOhc6Fz4XPhc+F0IXQhdGF0YXShdOF04XThdOF1IXVhdWF1YXWhdaF14XXhdiF2IXYhdiF2IXYhdiF2IXYhdiF2IXYhdiF2IXZhdmF2oXZhdqF2oXbhduF24XchdyF3IXdhd6F34XfheCF4YXhheKF4oXjheSF5IXlheaF5oXnheiF6YXpheqF64XrheuF7IXshe2F7YXtheyF7IXsheuF64XqhemF6YXoheeF54XmheWF5IXjheKF4YXgheCF34Xehd6F3oXehd+F3oXfhd6F3oXehd6F3oXehd+F4IXhheKF44XkheWF5YXmheaF54XnheiF6YXrheyF7IXthe6F7oXvhe+F8IXwhfCF8YXxhfKF8oXzhfOF8oXyhfKF8oXyhfKF8oXxhfKF8YXxhfGF8YXwhfCF8YXxhfKF84X0hfWF9YX3hfeF+IX4hfqF+oX7hfyF/IX9hf6F/4X/hf6F/YX9hf2F/YX9hfyF/IX8hfyF/IX8hfyF/IX8hfyF/YX9hf2F/oX+hf6F/oX9hf2F/oX+hf2F/IX8hfuF+4X7hfqF+oX5hfiF94X3hfeF9oX2hfaF9YX1hfWF9YX2hfaF9YX1hfWF9IX1hfSF9IX0hfSF9YX2hfaF94X3hfiF+IX4hfmF+YX6hfqF+4X8hf2F/oX/hf+F/4UAhgCGAIYAhgGGAYYBhgGGAoYChgKGAoYChgOGA4YDhgKGAoYChgOGA4YDhgOGA4YEhgSGBIYEhgSGBIYFhgWGBYYFhgaGB4YHhgiGCIYIhgmGCYYKhgqGC4YLhguGC4YMhgyGDIYMhgyGDIYMhguGC4YLhgqGCoYKhgqGCoYKhgqGC4YKhgqGCoYKhgqGCoYKhgqGCoYKhguGC4YLhguGCoYKhgqGCYYJhgmGCYYJhgiGCYYJhgmGCoYKhgqGC4YMhgyGDYYNhg6GDoYOhg6GDoYPhg+GEIYQhhGGEYYRhhKGEoYShhKGEoYShhKGEoYRhhKGEYYRhhGGEYYQhhCGEIYQhhCGEIYQhhCGEIYQhhGGEYYRhhKGE4YThhSGFIYUhhWGFYYVhhWGFoYWhhaGF4YXhhiGGYYZhhqGGoYahhuGHIYdhh2GHoYfhiCGIIYghiCGIIYghiCGIIYfhh+GH4Yfhh+GHoYehh6GHoYehh2GHYYehh6GHoYfhh+GIIYghiCGIYYihiKGI4YjhiOGJIYkhiSGJYYkhiWGJYYlhiWGJYYlhiaGJoYmhiaGJoYnhieGJ4YnhiiGKIYphimGKIYohiiGKIYohimGKYYqhiqGKoYqhiuGK4YrhiuGK4YrhiuGK4YshiyGLYYthiyGLIYrhiqGKYYphimGKYYohiiGKIYohiiGJ4YnhiiGJ4YnhiiGKIYohiiGKYYphimGKYYphimGKYYqhiqGK4YrhiuGK4YrhiuGKoYqhiqGKoYqhiqGKoYqhiuGK4YqhiqGKoYqhiuGK4YrhiuGLYYthi+GMIYxhjGGMoYyhjKGM4YzhjSGNIY0hjWGNoY2hjeGN4Y3hjiGN4Y3hjeGN4Y4hjiGOYY6hjqGO4Y8hjyGPYY9hj2GPYY8hj2GPYY+hj6GP4Y/hj+GP4Y/hj6GPoY+hj6GPoY9hj2GPYY9hj2GPIY8hjyGO4Y6hjmGOYY5hjmGOoY6hjqGOoY6hjqGOoY6hjuGPIY9hj2GPoY/hkCGQYZChkOGQ4ZDhkOGQ4ZDhkSGRIZFhkWGRYZFhkWGRYZGhkWGRYZFhkSGRIZEhkSGQ4ZDhkOGQoZDhkOGQoZChkKGQYZBhkGGQYZBhkGGQYZBhkGGQYZChkKGQoZChkKGQYZBhkGGQoZChkKGQoZChkGGQYZChkKGQoZChkKGQoZDhkOGQ4ZDhkSGRIZEhkSGRIZFhkWGRoZGhkeGR4ZHhkeGSIZIhkiGSIZIhkiGSYZKhkmGS4ZLhkuGS4ZLhkuGS4ZLhkyGTIZMhk2GToZOhk6GToZOhk6GT4ZOhk+GT4ZQhlGGUoZShlOGVIZUhlWGVYZUhlSGVYZVhlOGU4ZUhlSGU4ZRhlGGU4ZQhjqG4YStgmqAnH4yfSp8X3vNemN6EHrFeW95W3k4eSt5FXkKeQB563gBeUF5+3n4eu1733zDfZx+SX/uf32ABYF7geyBYoLDghqDdIPOgxeEYoSyhPKEMYVmhZmF0IUGhh+GQoZuhouGs4bChtuG8IYFhxCHIocrhzyHQodSh2CHbId5h4SHj4eYh6KHqoeyh7mHv4fFh8qHz4fTh9aH2Yfch9+H4oflh+eH6ofsh+6H8Ifyh/OH9Yf3h/iH+Yf7h/yH/Yf/hwCIAIgBiAGIAYgCiAKIAogBiAGIAIgAiP+H/4f/h/6H/Yf9h/2H/Yf+h/6H/of+h/2H/Yf9h/2H/of+h/6H/4f/h/+HAIgBiAGIAYgBiAGIAIgBiACIAIgAiAWIAYgBiAGIAYgBiACIAIgAiACIAIgAiACIAYgBiAKIA4gFiAWIBogGiAeICIgJiAmICogLiA2IDYgOiBCIEIgRiBKIEogSiBOIE4gUiBWIFYgViBaIFogWiBaIF4gXiBeIF4gYiBeIGIgXiBeIF4gXiBaIFogWiBeIF4gXiBiIGIgYiBmIGIgYiBiIGIgZiBmIGogaiBqIGogaiBqIGogaiBqIGogaiBqIG4gciByIHYgdiByIHYgdiByIHYgdiB2IHYgdiB2IHIgdiB2IHYgdiB2IHIgciB2IHYgdiB6IHogeiB2IHYgdiB2IHYgdiB2IHYgdiB2IHIgciByIG4gbiBqIGogaiBqIG4gaiBuIG4gbiByIG4gbiByIHIgdiB6IHogfiCCIIIghiCGIIogjiCSIJYgmiCaIJogniCeIJ4gniCeIJ4gniCeIJ4gniCeIJogmiCWIJIgkiCSII4gjiCOIIogiiCGIIoghiCGIIYghiCGIIYghiCKII4gjiCOIJIgkiCiIJYgliCaIJogniCeIKIgoiCeIJ4gniCeIJ4gniCaIJYgliCSIJIgkiCSIJIgliCWIJYgkiCSIJYgliCaIJogniCeIKYgqiCqIK4griCuIK4griCyILYguiC+IMIgwiDCIMIgwiDCIMYgxiDKIM4g0iDWINog3iDiIOIg4iDiIOYg6iDqIOog7iDyIPYg+iD6IP4g/iECIQIhAiECIQIhBiEGIQohDiEOIQ4hEiEWIRYhFiEWIRYhFiEaIRohGiEaIR4hIiEiISIhIiEiISYhJiEqISohKiEuITIhMiE2ITYhNiE2ITohOiE6ITohOiE+IT4hPiE+IT4hOiE6ITYhMiEyITIhMiEyIS4hLiEuIS4hKiEqISohJiEmISYhIiEmISohKiEqISohKiEqISohKiEuISohLiEqISYhJiEmISYhJiEqISYhJiEmISYhJiEmISohJiEqISYhJiEmISohKiEqISYhKiEqISohKiEuISohLiEuISohKiEuIS4hLiEuIS4hLiEqIS4hLiEqISohLiEuISohLiEuITIhMiEyITIhMiEyITIhMiE2ITYhOiE6ITohPiE+IT4hPiE+IT4hPiFCIT4hQiFCIUIhSiFKIUohTiFOIU4hUiFOIU4hTiFOIVIhUiFSIVYhViFaIVohViFWIVIhUiFOIU4hTiFOIU4hTiFOIVIhUiFOIUohSiFKIUYhRiFKIUYhRiFGIUYhRiFCIUIhQiE+IT4hPiE6ITohPiE+IT4hPiFCIUIhQiFCIUIhQiFCIUIhSiFKIUohSiFKIU4hSiFKIUohSiFKIUYhRiFGIUohSiFOIU4hUiFOIU4hTiFOIVIhUiFSIVYhViFWIVohWiFaIVohViFWIVIhViFSIVIhUiFSIU4hUiFSIVIhUiFSIVYhViFaIV4hXiFiIWIhZiFmIWohbiFuIXIheiF+IX4hfiF+IX4hfiF+IXohdiF6IXoheiF+IX4heiF6IXYhciFuIW4haiFmIWYhkiFeIVohXiFaIVohWiFWIVYhViFWIVYhWiFWIVohXiFeIWIhYiFmIWYhaiFqIWohbiFyIW4hbiFuIXIhciFuIW4hbiFyIXIhciFyIXIhdiF2IXohfiF+IX4hgiGCIYIhgiGGIYYhiiGKIYohiiGKIY4hjiGSIZIhkiGSIZIhkiGWIZYhmiGeIZ4hoiGmIaYhqiGqIaohqiGqIaYhqiGqIa4hriGyIbIhriGuIa4hriGuIaohpiGiIaYhpiGmIaYhpiGqIaohqiGqIaohqiGuIa4hsiGyIbIhtiG2IbohuiG+IcIhxiHGIcohyiHKIc4hziHSIdIh1iHaIdoh3iHiIeYh6iHuIe4h8iHyIfYh9iH+IgIiAiIGIgoiCiIOIg4iDiIOIhIiEiISIhIiFiIWIhYiGiIaIhoiGiIWIhoiGiIaIh4iGiIeIh4iIiIiIiIiIiIiIiIiHiIeIhoiGiIaIhoiFiIWIhIiDiIKIgYiAiICIf4h/iH6IfYh9iH2IfYh9iH2IfYh9iH6Ifoh/iICIgIiBiIGIgYiCiIKIg4iEiISIhYiGiIaIh4iIiIiIiIiIiImIiIiJiImIioiKiIqIi4iLiIyIjYiNiI2IjYiMiIyIjIiMiIuIi4iLiIuIi4iMiIyIi4iLiIuIioiJiIiIh4iHiIeIh4iIiIiIiIiJiImIiYiIiIaIhoiFiIWIhYiGiIaIh4iIiIiIh4iHiIeIh4iGiIaIhoiGiIeIiYiKiIuIjIiMiIyIjYiNiI2IjIiNiI2IjYiNiI2IjYiNiI6IjoiNiI2IjYiNiI2IjoiOiI6Ij4iQiJGIkoiTiJSIlYiWiJeIl4iXiJmImYiZiJqIm4ibiJqIm4ibiJaIm4ibiJyIm4ibiJqIm4ibiJyInIiciJuIm4iaiJqImoiZiJmImYiZiJiImYiZiJmImYiZiJiImIiXiJeIl4iYiJiImIiZiJmImoiaiJmImYiYiJeIloiViJWIlYiViJWIlYiUiJOIkoiSiJGIkIiQiI+Ij4iQiJCIkYiRiJKIkoiTiJOIlIiUiJWIloiXiJmImoibiJuInYieiJ+In4igiKGIooijiKCIpYiliKWIpYiliKaIpoimiKaIpoiniKeIpoimiKeIpoiniKeIp4iniKiIqIipiKmIqYipiKmIqYiqiKqIq4isiKyIrYiuiK6Ir4iviLCIsYiyiLKIs4i0iLSItoi3iLiIuIi4iLiIuoi6iLqIu4i6iLqIuoi6iLqIu4i7iLuIu4i7iLuIu4i7iLqIuYi5iLmIuIi4iLiIuIi3iLeIt4i3iLeIt4i3iLeIuIi3iLeIt4i3iLeIuIi3iLeIt4i2iLaItoi3iLeIt4i3iLeItoi1iLSItIi0iLOIs4iziLOItIi0iLWItYi1iLWItYi1iLSItIi0iLWItoi2iLeIuIi5iLqIuoi6iLuIu4i8iLyIvYi+iL6Iv4i/iMCIv4jAiMCIv4i/iL6Ivoi+iL6Ivoi+iL6Iv4i/iL+Iv4i+iL6Ivoi/iL6Ivoi/iL+IwIjAiMKIwojCiMKIw4jDiMOIw4jEiMSIxYjFiMaIxojGiMeIx4jHiMeIx4jHiMiIyIjIiMiIyIjIiMmIyYjKiMqIy4jLiMuIzIjMiMyIzIjMiMyIzIjNiM6IzojOiM+Iz4jPiM+IzojOiM6Iz4jPiM+I0IjRiNGI0ojSiNKI0YjSiNKI0IjQiNCI0IjQiNCI0IjPiM+Iz4jOiM6IzojNiM2IzYjNiM2IzYjOiM6Iz4jQiNCI0IjQiNCI0IjQiNGI0YjSiNOI1IjViNWI1ojWiNaI1ojWiNWI1ojXiNiI2YjZiNmI2IjXiNeI1ojViNSI1YjViNWI1YjUiNSI1IjTiNOI0ojTiNOI04jUiNaI1ojXiNiI2IjYiNmI2YjaiNuI3YjeiN6I34jgiOGI4ojjiOOI44jjiOOI5IjliOWI5YjkiOSI5IjjiOOI44jjiOGI4YjgiOCI4IjfiOCI4YjgiN+I34jfiN+I4IjgiOGI4YjhiOGI4IjhiOGI4YjiiOKI4ojjiOSI5YjmiOeI54joiOmI6IjpiOuI7IjuiO6I74jwiPCI8YjyiPKI8ojziPOI84j0iPWI9Yj3iPeI9oj3iPeI94j3iPeI94j3iPeI+Ij4iPeI94j4iPiI94j3iPeI+Ij4iPiI94j3iPeI+Ij4iPeI94j2iPeI94j2iPWI9Yj1iPSI9Ij0iPOI84j0iPOI84jyiPKI84jziPSI9Ij0iPSI9Yj2iPeI94j4iPeI+Ij4iPiI+Yj5iPqI+4j7iPuI+oj6iPqI+Yj5iPiI94j2iPeI94j3iPeI94j3iPeI9oj1iPWI9Yj2iPaI94j5iPmI+4j8iP2I/oj/iP+I/4gAiQGJAYkCiQOJA4kEiQSJBYkFiQSJBIkEiQSJBYkFiQWJBYkFiQaJBokHiQeJCIkIiQiJCIkIiQeJB4kHiQeJB4kHiQeJCIkIiQmJCYkIiQiJCIkIiQiJCIkHiQeJCIkJiQiJCYkIiQiJB4kHiQaJBYkFiQWJBokFiQaJBokGiQaJBokGiQWJBYkFiQWJBokGiQaJBokGiQeJB4kGiQaJBokHiQeJCIkJiQqJC4kMiQyJDYkOiQ6JD4kPiRCJEIkQiRGJEYkRiRGJEIkQiQ+JD4kPiQ6JDokOiQ6JDokNiQ2JDIkMiQyJDIkMiQ2JDYkNiQ6JDokOiQ+JD4kPiQ+JD4kQiRCJEIkRiRKJEokSiRKJEokRiRKJEYkQiRCJEIkQiRGJEYkSiRKJEokTiROJE4kTiRSJFYkWiReJF4kXiRiJGIkZiRqJGYkZiRmJGYkZiRmJGYkZiRiJGIkXiRiJGIkYiRiJGYkZiRmJGYkaiRuJG4kciR2JHokfiSCJIYkiiSOJI4kkiSWJJokmiSaJJokmiSaJJokliSWJJIkkiSSJI4kjiSOJIokiiSGJIYkgiSCJIIkgiSCJIIkgiSGJIYkiiSKJIokjiSKJI4kjiSSJJYkliSaJJ4kniSiJKokqiSuJK4ksiSyJLIktiS2JLokuiS6JLokuiS2JLokuiS6JLokuiS6JLoktiS2JLYktiSyJLIksiS2JLokuiS6JL4kviTCJMYkyiTOJNIk0iTaJNok3iTiJOIk5iTqJO4k6iTuJO4k8iT2JPYk+iT6JPok+iT6JP4lAiUCJQIlAiUCJP4k+iT6JPok/iT2JPYk8iTuJOok6iTqJOok4iTiJOIk4iTiJOIk5iTmJOIk3iTeJOIk4iTiJOIk3iTeJNok2iTaJNok1iTaJNok2iTeJN4k3iTiJN4k3iTeJN4k4iTiJOYk5iTqJOok6iTqJO4k6iTqJOok6iTuJPIk8iT2JPYk9iT2JPok/iT+JQIlAiUGJQ4lDiUSJRolGiUiJSYlKiUuJTIlNiU6JT4lQiVGJUolSiVSJVIlViVaJVolWiVaJV4lXiVaJVolWiVaJVolWiVeJV4lWiVaJVolWiVaJVYlViVWJVolViVWJVYlViVaJV4lWiVaJVolViVWJVIlUiVSJVIlSiVOJVIlTiVSJVIldiVSJVYlUiVWJVolWiVeJV4lXiVeJV4lXiVeJWIlXiVeJV4lXiVeJV4lWiVWJVIlTiVKJUYlSiVGJUolTiVSJVYlViVWJVYlViVWJVYlViVWJVolYiVmJWolbiVyJXIlbiVuJWolbiVuJW4lciVyJXYleiV+JX4lgiV+JX4lfiWWJYIlgiWCJYYlhiWKJY4lkiWWJZIlkiWSJY4lkiWWJZYlmiWaJZ4loiWiJaYlpiWqJaYlpiWeJZ4lniWeJZolmiWaJZolmiWWJZYljiWOJY4liiWGJYYlhiWGJYIlgiWCJYYlhiWGJYIlgiWGJYYlhiWGJYIlgiWCJX4lfiV+JX4lgiWCJYIlhiWKJYoljiWOJZIlkiWSJZolniWiJaIlpiWqJaolriWyJbIlsiWyJbIlsiWyJa4lriWyJbYltiW2JbYltiW6Jb4lwiXCJcIlxiXGJcolziXSJdYl1iXeJd4l3iXeJeIl4iXmJeYl5iXmJeYl5iXmJeol5iXmJeIl3iXiJd4l2iXaJdYl1iXWJdYl0iXSJc4lziXKJcolyiXKJcolyiXOJc4l0iXSJdIl0iXOJc4lyiXKJcolyiXOJc4lziXOJc4lyiXOJc4lziXOJc4l0iXSJdYl1iXWJdol2iXeJd4l4iXiJeol7iXuJe4l7iXuJe4l7iXyJfIl7iXyJe4l7iXuJfIl8iXyJfIl8iXuJe4l8iXyJfYl8iXyJfIl8iXyJfIl8iXyJe4l7iXuJe4l6iXqJe4l6iXqJeol6iXuJe4l8iXyJfol+iX6Jf4mAiYCJgImBiYGJgYmBiYKJgomCiYKJgomCiYKJgomBiYKJgYmBiYGJgYmBiYGJgYmBiYGJgYmCiYKJgomCiYKJgomCiYOJg4mDiYOJhImEiYSJhImFiYWJhYmEiYOJgomCiYKJgomBiYGJgYmBiYCJgIl/iX+Jf4l/iX6Jfol9iX2JfYl9iX2JfYl9iXyJfIl7iXuJe4l7iXqJeYl5iXmJeYl5iXqJeYl5iXqJeol6iXqJeol6iXuJe4l8iX2Jfol+iX6Jf4mAiYGJgImBiYGJgomDiYSJhomGiYeJiImIiYmJiYmLiYyJjYmNiY6JjomPiZCJkImRiZGJkImQiZCJj4mPiY+Jj4mOiY6JjYmNiYyJi4mKiYqJiomKiYqJi4mLiYqJi4mMiYyJjImMiYuJjImMiYyJjImNiY6JjYmNiY2JjomNiY2JjomNiY2JjYmNiY2JjYmOiY6JjomOiY6JjYmOiY6JjYmNiY2JjomOiY6JjomOiY6JjomOiY6JjomOiY6JjomPiY6JjomOiY2JjYmNiY2JjYmNiY2JjImNiYyJjImMiYuJi4mKiYqJi4mLiYuJi4mMiYuJjImMiYyJjYmOiY6Jj4mQiY+JkImQiZGJkYmRiZKJk4mViZaJlomWiZeJmImYiZmJmYmZiZqJm4mbiZuJnImdiZ2JnomeiZ6JnomeiZ6JnYmciZ2JnImciZ2JnImciZuJm4mbiZqJmYmZiZmJl4mXiZeJl4mYiZiJl4mYiZiJmYmaiZuJnImdiZ6JoImhiaGJoomjiaSJpImkiaaJpomniaiJqYmpiaqJqomqiaqJq4mriauJq4mqiauJq4mriayJrImtia2JrYmtia2JrYmtia6JrYmtia2JrYmuia6JrYmtia2JrYmsiayJrImsiayJrYmtia2JrImtiayJrYmtia6Jr4mvibCJsImwia+JsImwibGJsYmyibKJsomzibOJtIm0ibOJs4mzibOJs4m0ibSJtIm1ibSJs4myibGJsYmxibGJsYmyibOJs4mzibOJs4mzibSJtIm0ibWJtom3ibiJuYm6ibqJuom7ibqJuom7ibyJvYm9ib6Jvom+ib6JvYm+ib2JvYm+ib2JvYm9ib6Jvom+ib6Jvom+ib+Jv4nAicGJwonDicSJxInFicaJx4nIiciJyInIiciJyYnIiciJyYnJicmJyonKicqJyonLicqJyonKicqJyonLicuJy4nLicyJzYnMicyJzInLicuJy4nKicuJy4nLicuJy4nLicuJy4nLicuJy4nLicuJyonLicyJzYnOic6JzonPidCJ0YnSidKJ0onTidSJ1InVidWJ1onXidiJ2InZidmJ2YnZidiJ2InXideJ14nZidmJ2onaidqJ24nbiduJ24nbiduJ24ncidyJ3Yndid6J3onfid6J3ondid2J3YncidyJ24nbiduJ2onZidmJ2onZidmJ2YnYidiJ2InYidiJ2InYidiJ2YnYidiJ2InXideJ14nXideJ14nWidaJ1onVidWJ1YnWidWJ1onWidaJ14nYidiJ2InYidiJ14nXidiJ2YnZidmJ2onZidmJ2YnYidiJ2InZidmJ2YnZidmJ2YnaidmJ2onaidqJ24nbiduJ24nciduJ3IncidyJ3Indid2J3onfieCJ4YnhieGJ4onjieWJ5YnlieaJ5onnieeJ54nmieeJ54nnieeJ54nnieeJ54nnieeJ5onnieiJ6InpieqJ6onrieuJ64nsieyJ7Intie2J7onuie+J74nvifCJ8InwifCJ8YnyifKJ8onyifKJ8onzifOJ9InzifSJ84nyifOJ8onyifGJ8Invie+J74nuie6J7ontie2J7YnsieyJ7Insie2J7Ynuie2J7onvifCJ8InxifKJ9InzifSJ9Yn1ifeJ94n3ifeJ+In5ifmJ+on5ifmJ+Yn4ifmJ+on6ifqJ+on6ifqJ+on2ifuJ+on7ifmJ+on5ifuJ/In8ifuJ+4n4ifuJ+4n7ifyJ/In7ifuJ+4n7ifuJ+4n7ifuJ+4n7ifuJ+4n7ifuJ+4n7ifuJ+on6ifqJ+4n7ifyJ/In9if2J/Yn9if6J/Yn9if2J/on+if6J/on/iQCKAIoAiv+J/4n/iQCK/4kAiv+J/4kAigCKAIoAiv+J/4n/if6J/on9if2J/Yn9if2J/on+if2J/on9if2J/Yn+if6J/4kAigCKAIoAigGKAYoCigKKA4oDigSKBYoGigaKB4oIigiKCYoJigiKCYoJigqKCooLiguKCooKigmKCooKigmKCYoJigmKCIoJigiKCIoJigiKCIoHigiKCYoKiguKC4oKiguKDIoMiguKC4oLiguKDIoMigyKDIoNig2KDIoLigqKCooJigmKCIoIigiKCIoIigiKCIoIigiKCIoIigiKCIoHigeKB4oHigeKB4oHigiKCYoJigqKCooJigqKCooKiguKC4oLig6KDooPihCKEYoSihKKE4oTihOKE4oUihWKFYoVihWKFooWiheKFooVihWKFooWihaKFooVihWKFYoWihWKFYoVihWKFYoUihOKEooTihKKEooRihGKEYoRihGKEYoQihCKD4oPig+KD4oOig+KD4oPihCKEIoRihGKEIoRihCKEIoQihCKEIoRihGKEooSihSKFIoVihaKFooXihiKGYoaihuKHIocih2KHooeih+KH4ogiiCKIIogiiGKIIogih+KH4ofih+KH4odih6KHoodihyKG4oeihmKGIoXiheKFYoWihWKFooViheKF4oYihmKGYoaihuKHIodih6KH4ohiiOKI4okiiSKJYoliiWKJYomiiaKJoomiiaKJ4oniieKKIoniieKJ4ooiimKKooqiiqKKooriiyKLIosiiyKLIoriiuKK4osiiyKK4oriiuKKYopiiiKKYopiiiKJ4omiiaKJ4oniiaKJooliiWKJYomiiWKJoomiieKJ4ooiiiKKYoqiiyKLIotii6KL4ovijCKMoozijOKNYo1ijaKN4o3ijiKOIo4ijmKOYo7ijuKO4o8ij2KPoo+ij6KP4o/ij+KQIpAikCKQIpAikCKQIpAij+KP4o/ij6KPoo9ij2KPYo9ijyKO4o7ijqKO4o7ijyKO4o8ijyKPYo9ij6KPoo+ij6KPoo/ij+KQIpBikGKQopCikKKQopDikOKQ4pEikSKRIpFikeKR4pHikiKSIpHikeKSIpIikiKSIpHikiKSIpIikeKRopGikWKRIpDikKKQopCikKKQopCikGKQIpAikCKQIpAikCKQIpAikCKP4pAikGKQYpCikKKQopDikKKQ4pEikSKRYpFikSKRIpFikaKRopIikiKSYpKikqKS4pLikyKTIpNik2KTopPik+KUYpRilKKUopSilKKU4pSilOKU4pTilOKU4pUilWKVYpUilWKVYpUilWKVYpUilWKVYpVilWKVYpVilWKVIpUilSKVIpUilSKU4pTilKKUopRilKKUYpRilGKUIpQilCKUIpQilGKUIpPik+KTopPilCKUIpQilCKUYpRilGKUYpRilGKUYpQilCKT4pPik6KTopOik6KTYpMikyKS4pLikqKSopJikmKSYpKikmKSopKikuKS4pMikyKTYpNik6KTopPilCKUopTilSKVIpUilWKVYpWilaKV4pXileKVopXilaKVopXileKVYpUilSKU4pTilOKVIpUilSKVIpUilWKVYpWilaKV4pXileKV4pYiliKWIpYiliKWIpZiliKWIpYiliKWIpXilaKVYpVilSKVIpTilSKVYpUilWKVopWilWKVYpWilaKV4pXiliKWYpZilmKWYpailqKW4pbilyKXIpdil2KXopeil6KXopeil6KXopfil+KX4pfil6KXopdil2KXYpdilyKXIpbiluKWopailqKWYpailqKWYpZilmKWYpZilqKWopailuKW4pcil2KXopfil+KX4pfimCKYIphimKKY4pkimWKZIplimWKZYpkimSKY4pjimOKY4piimOKY4piimOKYophimCKYYphimCKYIphimGKYopiimGKYYpiimKKYopiimKKYYpiimKKYopjimKKYopjimKKYopiimGKYopiimOKY4pjimSKZIpkimSKZIplimSKZYplimaKZopoimiKaopqimuKaopqimqKaopqimuKa4primqKaoprimuKa4primqKaopqimqKaYppimmKaYppimmKaIpoimmKaoppimqKaopqimyKbIpsimuKa4psim2KbYpuim6Kb4pwinCKcIpwinCKb4pwinCKb4pvim+Kb4pvinCKcIpvim+Kb4puim+Kb4pvim+Kb4pwim+KcIpxinKKcopzinOKc4p1inaKd4p4inmKeYp6inuKfYp/ioCKgYqCioOKhIqEioWKhYqHioiKiYqIioqKioqLioyKjIqNio2KjoqOio6Kj4qPio+KkIqQipCKkIqQipCKj4qPio6Kj4qPio+KjoqOio6KjoqNio2KjYqNio2KjYqMioyKjIqMioyKjIqLiouKi4qKiomKiIqIioeKhoqGioaKhYqFioWKhYqFioWKhIqEioWKhYqFioaKiIqKiouKjIqMio2KjoqPio+Kj4qPipCKkIqRipCKkYqRipGKkIqPio+KjoqNio6KjoqOio6KjoqOio6KjoqOio+Kj4qPio+KjoqPio+KjoqOio6KjoqNioyKioqKiomKiYqIioeKhoqFioWKhoqFioSKhIqEioSKg4qDioOKg4qEioSKhIqEioWKhYqGioeKiIqIioiKiYqKiouKjIqNio2KjoqOipCKkIqRipGKkYqSipOKk4qSipKKk4qUipOKk4qSipKKkoqSipKKkoqTipKKk4qUipOKk4qTipOKk4qTipSKlIqVipaKl4qYipmKmYqZipiKmYqZipqKmoqbipuKnIqdip6Knoqeip+Knoqeip6Knoqfip+KoIqgiqGKoYqiiqKKo4qkiqSKpIqliqWKpYqmiqeKqIqoiqiKqIqpiqqKq4qriquKrIqsiq2Kroquiq6Kroquiq6Kroquiq6Kroqviq6Kroquiq6KrYqsiquKq4qqiqqKq4qsiqyKrYqtiq2KrYqtiq2KrYqtiq2Kroquiq+KsIqwirGKsoqyirKKsoqyirOKtIq1iraKtoq3ireKt4q2ireKtoq2iraKtYq1irWKtIqzirOKsoqyirGKsIqviq6Kr4qwiq+Kr4qwiq+Kroqviq6Kroqviq6KrYqsiqyKrIqsiqyKrYqriqqKqoqqiqmKqoqriqqKqoqriquKrIqtiq6Kroquiq6Kroquiq+KsIqwirCKsYqxirCKsYqxirKKsoqyirKKsoqzirOKs4qzirSKtYq1irWKtoq2irWKtYq1irSKtIq0irSKtIq0irSKtIq0irSKs4q0irSKtYq0irSKtYq1iraKt4q3ireKt4q3iriKuIq4iriKuYq6irqKuoq7iryKvIq9ir6Kvoq+ir+KwIrAisGKwIrBisGKworCisKKwYrCisGKwYrBisGKworBisGKwYrBisKKworCisGKwYrBisGKwYrBisKKworDisKKworCisGKwYrBisGKwIrBisGKwYrCisGKwYrBisGKwIrAisCKwIrBisCKwYrAisGKwYrCisKKw4rDisOKw4rDisOKw4rEisOKxIrFisWKxorGiseKx4rHiseKx4rGisaKxorGisaKxorIisiKyYrJismKyYrJismKyYrJisqKyorLisuKy4rMis2KzorPis6KzYrOis6Kz4rPis+Kz4rPis+Kz4rPis+KzorPis+Kz4rPitCK0IrQitCK0IrPis+K0IrRitGK0YrSitKK04rTitSK1IrUitWK1YrWitaK14rYitmK24rbituK2oraitqK2oraituK24rcityK3IrcityK3Yrdit2K3ordit6K34rgiuGK4orjiuSK44rjiuOK44rkiuWK5ormiueK54rniueK54rniueK54roiuiK6YrpiumK64rriuqK6YrpiuiK6IrniueK54rmiuaK54rmiuWK5IrkiuSK5IrjiuSK44rkiuWK5YrmiueK54rniuiK6IrpiuqK64rriuyK7Irtiu6K7orviu+K74rviu+K7oruiu6K7oruiu2K7Yrtiu2K7Yruiu2K7IrsiuyK7IrriuuK64rsiuyK7IrsiuyK7IrsiuyK7Yrtiu6K7oruiu+K8IrwivGK8oryivSK9Ir1ivaK9or3iviK+Yr6ivqK+or7ivuK/Ir8ivyK/Yr9iv2K/or+iv6K/or9iv2K/Ir7ivqK+Yr6ivmK+Yr4iviK+Ir4iveK94r3iveK94r3iveK94r4iviK+Yr7ivuK+4r7ivyK/Ir8ivyK/Ir8ivyK/Ir8iv2K/Yr+iv6K/4r/iv6K/Yr/igCLAIsAiwKLAYsCiwKLA4sDiwSLBIsDiwSLBYsEiwSLBIsEiwOLAosCiwGLAYsCiwKLAosCiwKLAosCiwKLAosBiwGLA4sEiwWLBosHiweLB4sHiwaLBosHiweLCIsKiwqLCosKiwuLDIsMiwuLC4sMiwyLDYsNiw6LD4sQixCLEIsPiw+LEIsQixGLEosRixGLEosSixKLEosSixKLEYsRixCLD4sQixCLEIsRixKLEosSixOLFIsUixSLFYsVixWLFosXixiLGYsZixqLGosaixqLGYsZixmLGYsaixqLGosaixqLGYsZixmLGIsZixiLGIsXixeLF4sWixeLFosVixWLFYsUixSLFIsUixOLEosSixKLE4sTixOLE4sUixSLFIsUixSLFIsUixSLFIsUixWLFosXixeLFosWixaLFYsXixeLF4sXixaLF4sXixeLGIsXixiLGIsYixiLGIsZixmLGosaixqLG4saixuLG4scixyLHIsbixuLG4sbixuLHIsdix6LH4seix6LHoseix6LHoseix6LHosfiyCLIYshiyKLIoshiyCLH4sfix+LH4sfix+LH4sgix+LH4sfix+LH4seix6LHoseix+LH4sfix+LIIsgiyCLIIsfiyCLIIsgiyCLIIshiyGLIYsiiyKLIosjiyOLJIskiyWLJYsmiyiLKIsqiyqLK4ssiy2LLosuiy6LL4swizCLMYsyizKLMosxizKLMYsxizCLMIsviy+LLostiyyLLYstiy6LLosuiy6LL4sviy+LLosuiy2LLosuiy+LMIswizGLMosyizKLM4szizOLM4s0izaLNos3iziLOYs5izuLO4s7izuLO4s8iz2LPYs8izyLPIs8izuLOYs6izmLOYs5iziLN4s3izeLNos2izWLNYs0izSLNIs0izSLNIs1izWLNos2izeLOIs4izmLOos6izyLPYs+i0CLP4tAi0CLQYtCi0KLQotCi0KLQotCi0KLQotCi0OLQotDi0KLQotDi0SLRItEi0SLRItDi0SLQ4tFi0WLRYtFi0SLRItFi0WLRotHi0eLR4tHi0mLSYtKi0uLTItNi02LTotPi06LUItQi1CLTotOi02LTYtMi0yLS4tKi0qLSotKi0qLSotLi0uLTItNi02LTItNi06LTotPi0+LUItQi1CLUYtQi1CLUItQi0+LT4tPi06LTotNi02LTYtOi06LT4tOi0+LT4tPi0+LT4tPi0+LT4tPi1CLUItQi1GLUotSi1KLU4tTi1OLVItUi1SLVYtVi1aLV4tYi1mLWotai1uLW4tai1uLXItbi1uLXItci1yLXItci12LXItci1uLW4tbi1yLXItci1uLWotai1mLWYtZi1iLWItYi1iLWItXi1eLV4tXi1eLV4tXi1iLWItZi1mLW4tbi1uLW4tbi1uLXItci1yLXItdi12LXYtci1yLW4tci1yLW4tai1uLWotbi1uLW4tbi1qLWotai1mLWotZi1qLW4tci12LXYtei16LXotei1+LX4tgi2GLYYtii2KLY4tji2SLZItji2OLY4tji2KLY4tji2OLYotii2KLYotii2KLY4tji2KLYYthi2OLY4tji2OLY4tji2SLZItki2SLZItki2OLY4tii2KLY4tji2OLY4tji2KLYotii2KLYYthi2GLYYthi2GLYotji2OLZItki2WLZYtmi2eLZ4toi2iLaItpi2qLaotri22Lb4tvi3CLcYtxi3GLcotzi3SLdIt1i3SLdIt2i3aLd4t3i3iLeIt4i3iLeIt3i3iLd4t3i3eLdot2i3aLd4t3i3aLdot3i3eLdot1i3WLdIt0i3WLdIt0i3SLdItzi3SLdIt0i3OLc4tzi3KLcYtwi3CLcItwi3CLcItwi3CLcYtxi3KLcotzi3KLcotzi3OLc4t0i3aLdot2i3aLdot1i3WLdYt0i3WLdYt1i3WLdYt2i3WLdIt0i3OLcotyi3KLcotzi3OLdYt1i3SLdIt1i3SLdIt0i3SLdYt1i3WLdYt2i3eLd4t5i3qLeot6i3uLfIt8i32Lf4t/i4GLgYuCi4OLg4uEi4SLhYuFi4WLhYuFi4WLhYuFi4WLhIuDi4OLgouCi4KLg4uCi4KLgouCi4KLgouBi4KLgouBi4KLg4uCi4KLgouDi4KLgouCi4GLgouDi4OLg4uDi4OLhIuDi4OLg4uEi4SLhYuEi4SLg4uEi4SLhYuFi4SLhIuEi4SLhYuFi4SLhYuFi4WLhouGi4eLiIuJi4iLiYuJi4mLiYuJi4mLiYuJi4mLiouKi4uLi4uMi4uLi4uLi4yLjYuNi42LjouOi4+Lj4uPi4+LkIuQi5CLj4uQi4+LkIuQi5OLj4uPi5CLkIuRi5GLkouSi5OLk4uTi5SLk4uUi5WLlYuVi5WLlYuWi5aLlouWi5SLlIuTi5SLk4uTi5SLlYuVi5WLlYuWi5eLl4uYi5iLmYuai5uLnYudi5+LoIuhi6KLoouii6OLo4uki6SLpIumi6eLpoumi6WLpYuli6WLpIuji6OLoouii6KLoYugi5+Ln4ufi56LnYudi56Ln4ufi5+Ln4ufi6CLoYuhi6KLo4uki6WLpouni6eLqIuoi6mLqYupi6mLqYupi6qLqoupi6qLqYuoi6eLqIuoi6eLp4uni6eLpoumi6aLpoumi6aLpoumi6aLpoumi6eLp4umi6aLpoumi6eLqYuqi6qLq4uri6uLrYuti66Lr4uwi7CLsouyi7SLtIu1i7aLtYu0i7SLtIuzi7SLs4uyi7GLsIuvi66Lrouti6yLq4uqi6mLqYupi6mLqYuoi6iLqYupi6mLqYupi6iLp4uoi6iLp4uoi6iLqYuoi6iLqIuoi6mLqYuoi6iLqIupi6mLq4uri6yLrYuti62Lrouvi6+LsIuwi7GLsIuxi7KLsouzi7OLs4uzi7SLtIu0i7SLtYu1i7WLtYu0i7WLtYu1i7WLtYu2i7aLt4u3i7eLtou2i7aLtou1i7aLtYu2i7eLtou2i7eLtou2i7aLt4u3i7eLuIu5i7mLuYu5i7qLuYu5i7mLuYu6i7uLvIu9i76Lvou+i7+Lv4u/i7+Lv4u/i7+Lv4vAi8GLwYvCi8KLwovCi8GLwYvBi8CLwIu/i7+Lvou/i8CLv4vAi8CLwIvBi8GLwIvAi8GLwYvBi8KLw4vDi8SLxYvFi8WLxYvFi8SLw4vCi8KLwYvCi8KLwYvBi8GLwIu/i7+Lv4u/i7+Lvou+i76Lv4vAi8GLwYvBi8GLwYvCi8OLw4vEi8WLxYvHi8iLyYvKi8uLzIvMi82LzYvOi8+Lz4vPi8+LzovNi82LzYvMi8uLyovJi8mLyIvIi8iLyIvHi8aLxYvFi8WLxYvFi8aLx4vIi8iLyYvKi8qLy4vMi82LzovPi9CL0YvSi9OL1YvWi9iL2ovbi9uL3Ivei9+L4Ivii+KL44vji+OL44vji+SL44vji+SL5Ivki+SL44vki+OL4ovhi+CL4Ivgi9+L4Ivfi+CL4Yvhi+GL4Ivfi96L3ovei96L3ovei+CL4Ivhi+GL4Yvji+SL5Ivki+WL5Yvmi+eL6Ivoi+iL6Ivpi+qL6Yvpi+eL5ovmi+WL5Ivji+OL4ovii+GL4Ivgi9+L34vfi9+L3Yvei96L3Yvei96L3ovei9+L34vfi9+L4Ivfi9+L34vgi9+L34vfi96L34vfi9+L34vei9+L34vfi+CL4Yvgi+CL4Yvhi+GL4Ivhi+GL4ovii+OL4ovii+SL44vii+KL4Yvhi+GL4ovii+KL44vki+WL5ovmi+eL54vpi+mL6Ivqi+uL7Ivsi+yL7ovvi++L8Ivvi++L74vvi/CL8Ivxi/GL8Yvzi/OL9Iv0i/WL9ov2i/aL94v2i/eL+Iv3i/aL9Yv1i/SL9Iv0i/OL8Yvwi++L7ovui+2L7Yvsi+qL64vqi+qL6Yvri+qL64vqi+qL6Ivpi+mL6Yvri+uL64vqi+uL7Ivsi+yL7Ivti+2L7ovui+6L74vwi/GL8ovzi/OL84v0i/aL94v3i/eL+Iv5i/mL+ov7i/uL/Yv9i/6L/4v/iwCMAIwBjAGMAYwBjAKMA4wDjAOMBIwDjAOMBIwEjASMA4wCjAKMAowBjACMAIwAjACM/ov8i/yL+4v7i/qL+4v7i/qL+4v6i/uL/Iv8i/yL/Yv9i/2L/osAjAGMAYwDjAOMA4wDjAOMA4wDjASMBYwGjAeMB4wIjAiMCIwIjAiMCIwHjAeMB4wGjAaMBowGjAaMBYwEjAOMAowBjAKMAowBjACM/4v/iwCMAIwAjACMAIwAjACMAIwAjACM/4sAjACM/ov+i/+L/4v/i/+L/4v/i/+LAYwBjAGMAowCjAGMAowDjAOMBIwFjAWMBIwFjAaMBowGjAaMBowFjAeMB4wHjAeMCIwIjAiMCIwIjAmMCowKjAuMC4wLjAyMDYwOjA+MD4wPjBCMEYwSjBKME4wUjBSMFIwVjBaMF4wYjBiMGYwYjBiMGIwZjBqMGowbjBuMG4wbjByMG4wbjBuMG4wbjBuMG4wajBqMGowcjByMHIwcjByMHIwcjByMHIwdjB+MIIwhjCGMIYwijCOMJIwmjCWMJYwljCWMJYwmjCaMJ4wnjCeMKIwojCmMKYwqjCuMK4wrjCyMLYwtjC6MLowujC+MLowujC2MLIwrjCqMKIwojCeMJowmjCWMJIwjjCOMIowijCGMIYwhjCGMI4wjjCSMJIwljCWMJIwkjCSMI4wijCKMIYwijCCMIIwgjB+MHowcjByMG4wcjB2MHYwdjB6MHowgjCGMIowijCOMJYwljCaMJ4wojCmMKowrjCyMK4wrjCuMKowrjCuMK4wrjCyMLIwsjCyMLIwtjC2MLYwujC6MLowwjDKMNYw2jDeMN4w4jDmMOow7jDyMPYw9jD6MP4xAjECMQoxBjECMQIw/jD6MPow+jD6MPYw8jDyMPIw8jDyMO4w6jDqMOow4jDiMOIw3jDeMOIw4jDiMOIw4jDiMOIw3jDeMN4w3jDiMN4w2jDaMN4w2jDeMN4w3jDeMNow2jDaMNow3jDeMOIw3jDiMOYw5jDuMPIw8jD2MPYw+jD6MPow+jD6MP4xAjEGMQYxBjEGMQYxBjEKMQoxCjEKMQoxCjEGMQoxCjEKMQ4xDjEKMQoxDjEOMRIxEjESMRIxEjESMRYxGjEaMSIxHjEiMSYxJjEmMSYxJjEqMSYxJjEmMSoxJjEqMSYxJjEmMSYxIjEmMSoxJjEqMSoxKjEmMSIxJjEmMSYxJjEqMS4xLjEuMS4xLjEuMS4xLjEuMSoxLjEyMTYxMjE2MTYxMjE2MTIxLjEyMTYxNjE2MToxOjE+MUIxQjFCMUIxPjFCMUYxQjFGMUoxUjFSMU4xTjFOMUoxQjFGMUIxPjE+MToxOjE+MT4xPjE6MToxOjE2MToxPjE+MUIxPjFCMUYxRjFGMU4xUjFSMVIxVjFWMVoxWjFaMVoxVjFaMV4xXjFiMWYxZjFqMWoxajFmMWoxbjFuMXIxcjF2MXYxdjF6MXoxfjF+MYIxgjGGMYoxjjGOMY4xijGOMY4xkjGWMZYxljGWMZYxljGSMZYxkjGWMZIxkjGSMZYxnjGiMaIxojGaMZYxljGWMZIxjjGSMZYxkjGSMZIxkjGSMY4xijGKMYYxgjGCMYYxhjGKMY4xjjGSMZIxljGWMZoxmjGaMZ4xojGiMaYxpjGmMaoxrjGuMbIxqjGqMaoxqjGmMaIxojGiMaIxpjGmMaIxnjGeMaIxnjGaMZoxnjGiMZ4xnjGeMZ4xnjGaMZYxkjGOMZIxkjGWMZYxmjGeMZ4xnjGaMZoxnjGaMZoxnjGiMaYxpjGuMbIxtjG2MbYxtjG6MboxwjHGMcYxzjHWMdox3jHeMd4x4jHiMeIx3jHiMeYx5jHmMeox7jHuMeox7jHuMeox7jHuMe4x7jHyMfIx9jH6Mfox/jH6Mf4x+jH6Mfox+jH6Mfox+jH6Mfox+jH6MfYx9jH6MfYx8jHuMe4x7jHqMeYx4jHeMdYx0jHOMcYxxjHGMb4xvjG6MbYxsjGuMaoxrjGqMaoxrjGqMa4xsjG2MboxujG6Mb4xvjHCMcYxyjHOMdIx0jHSMdIx2jHeMd4x4jHiMeIx3jHiMeYx5jHmMeox5jHmMeYx5jHqMeox6jHiMd4x4jHiMeIx4jHiMeIx3jHiMeIx4jHmMeYx6jHqMeox7jHyMfYx+jH+MgIyBjIKMg4yEjIaMhoyHjIeMiIyIjIiMiYyKjIuMi4yMjIyMjIyNjI2MjIyLjIuMjIyMjIyMjYyNjI2MjoyOjI6Mj4yOjI+Mj4yPjI+MkIyQjJCMkYyRjJKMkoySjJKMk4ySjJOMk4yUjJSMlYyVjJaMloyWjJeMl4yYjJiMmIyYjJmMmYyYjJiMmIyXjJeMl4yVjJaMloyWjJeMl4yXjJeMl4yYjJeMmIyWjJaMl4yXjJeMl4yYjJmMmYyZjJiMmIyXjJeMl4yXjJaMloyVjJWMlYyUjJWMlIyUjJOMkoySjJCMkIyOjI6MjYyNjIyMi4yLjIqMiYyJjImMiYyJjIiMh4yIjIeMiIyJjIqMioyLjIyMjIyOjI6Mj4yPjI+Mj4yPjJCMkIySjJKMkYyQjJGMkIyPjI+Mj4yQjI+MkIyPjI+MkIyQjJCMkYyRjJGMkYySjJSMlIyUjJWMlYyVjJaMl4yWjJaMloyXjJaMlYyVjJWMlYyWjJaMlIyUjJSMlIyUjJOMkoySjJKMk4yUjJSMlYyWjJeMl4yXjJeMl4yXjJiMmYyYjJmMmoyajJqMmoyZjJmMmIyYjJiMl4yXjJaMloyWjJeMl4yXjJeMl4yWjJiMmYyYjJqMnIydjJ2MnYydjJ6Mn4ygjKGMoIygjKCMoYyhjKGMoIyhjKKMoYygjKGMoYyhjKGMoIygjKCMoYyhjKGMooyjjKOMo4yjjKSMpIyljKWMpYykjKWMpYyljKWMpoymjKeMp4ynjKeMpoymjKeMp4ymjKaMp4yojKmMqYyqjKyMrIysjKuMq4yrjKqMqoypjKmMqYyojKmMqYypjKmMqIyojKiMpoymjKaMp4yojKiMqoyrjK2MrYyujLCMsIywjLKMsYyyjLOMtIy2jLeMuIy5jLmMuYy5jLqMuoy6jLyMu4y8jL2MvozAjMGMwIzBjMGMwIzAjMCMwIy/jMCMv4y+jL6MvYy9jLyMu4y6jLqMuYy5jLmMt4y3jLeMt4y3jLeMtoy2jLWMtIy0jLSMtIy0jLOMs4yzjLOMs4yzjLOMsoyyjLKMsYyxjLKMs4y0jLSMtYy1jLWMtYy2jLSMtYy1jLWMtoy3jLiMuYy7jLuMuoy7jLyMvIy9jL6Mvoy/jL+MwYzAjMGMwozCjMSMw4zDjMOMw4zDjMSMw4zEjMWMxYzFjMSMxIzFjMWMxIzFjMWMw4zEjMSMxIzFjMaMxYzEjMSMw4zCjMOMw4zEjMOMw4zDjMOMxIzEjMWMxIzFjMWMx4zIjMiMyYzKjMuMyozLjMqMyozLjMyMzYzNjM6MzYzNjM2MzIzMjMyMzIzMjMyMy4zMjMyMzIzNjM2MzIzMjMuMy4zLjMqMyozKjMmMyYzJjMmMyYzJjMiMyIzJjMiMyYzJjMqMyozKjMqMy4zNjM2MzozNjM2MzYzNjM2MzozPjM+MzozOjM6MzYzNjMyMy4zMjMuMy4zLjMyMzYzNjM2MzozOjM6MzozPjM+Mz4zQjNGM0ozTjNOM1IzVjNWM1YzVjNWM1YzVjNSM1IzUjNSM1YzVjNWM1YzVjNSM1IzUjNSM1IzTjNSM1IzVjNWM1YzWjNaM1YzVjNSM1IzUjNSM1IzVjNSM1YzUjNOM0ozRjNKM04zUjNSM1YzWjNeM2YzajNuM24zbjNyM3YzejN+M4IzhjOGM4YzhjOGM4YzhjOCM4IzfjN+M34zfjOCM4YzhjOCM4YzijOOM5IzljOWM5oznjOiM6YzqjOuM7IztjO+M8IzvjO+M8YzxjPGM8ozzjPOM9Iz0jPOM84z0jPSM9Iz0jPOM8ozyjPKM8ozxjPGM8ozxjPCM8IzwjPCM8YzyjPGM8YzyjPKM8ozzjPOM9Iz1jPaM9oz2jPeM94z3jPeM94z3jPaM94z2jPWM94z2jPaM9oz2jPaM9oz2jPaM9oz1jPWM9Yz1jPWM9YzzjPOM84zyjPKM8ozxjPGM8YzxjPCM8IzwjPGM8YzwjO+M74zwjPKM84zzjPOM9IzzjPSM9IzzjPKM8ozyjPGM8ozyjPOM9Iz1jPWM9Yz1jPWM9oz1jPaM9Yz1jPeM94z4jPiM+Iz5jPqM+Iz4jPiM+Iz5jPmM+oz7jPuM/Iz9jP6M/Yz+jP+M/4wAjQCNAI0BjQGNAY0BjQGNAo0CjQKNAY0AjQCNAI3/jP+M/4z+jP6M/oz/jP+M/oz/jP+M/4z+jP2M/Iz8jP2M/Yz9jP6M/oz+jP+M/oz+jP2M/oz+jP6M/oz+jP+MAI0AjQCNAI0AjQCNAI0Ajf+M/4z+jP+M/oz+jP6M/oz+jP6M/Yz8jPyM/Yz9jPyM/oz+jP6M/4z+jP+MAI0BjQKNAo0CjQGNA40DjQWNBY0FjQaNB40HjQeNCI0IjQmNCY0JjQqNCY0JjQqNCo0KjQuNC40LjQuNC40MjQyNDY0NjQ2NDY0NjQ2NDo0OjQ6NDo0PjQ+NEI0QjRCNEY0RjRGNEY0QjRGNEY0RjRGNEo0RjRGNE40TjRONEo0TjRONEo0SjRKNEo0TjRONE40UjRSNFI0TjRONE40SjRKNEo0TjRONE40TjRONE40SjRKNEY0QjRCNEI0PjRCND40OjQ6NDo0NjQuNC40LjQuNC40KjQqNC40LjQyNDI0LjQyNC40LjQyNDY0OjQ6NDY0NjQ2NDY0NjQ6NDo0OjQ+ND40PjRGNEY0RjRONFI0VjRSNFo0YjRqNGo0cjR2NHo0fjR+NII0gjSGNIo0kjSWNJY0ljSWNJo0njSaNJo0mjSaNJo0njSeNJ40njSeNKI0ojSiNKI0njSeNJo0mjSWNJY0ljSWNJY0ljSaNJY0mjSaNJo0kjSSNJI0jjSSNJI0jjSSNJI0kjSSNI40jjSONIo0ijSKNIo0ijSONJI0jjSSNJI0ljSaNJo0njSeNKY0qjSuNLI0rjSyNLI0tjS6NLo0vjTCNMY0xjTKNMY0xjTGNMo0yjTGNMY0wjTCNMI0xjTGNMI0vjS+NLo0ujTCNMI0xjTKNMo0xjTKNM40zjTSNNY02jTWNNY02jTeNOI04jTeNN401jTWNNY00jTONM40zjTONM40zjTKNMo0zjTKNMY0xjTGNMY0wjTKNMo0xjTONM40yjTSNNI00jTWNNY02jTeNOY05jTqNPI09jT2NPo0/jUCNQI1CjUONQo1EjUWNRI1FjUaNRo1GjUeNSI1HjUeNSI1HjUiNSI1JjUiNSY1KjUqNSo1MjUuNTI1MjUyNTI1MjU2NTI1MjU2NTI1NjU2NTY1NjUuNS41KjUqNSo1KjUuNS41MjUuNSo1LjU2NTo1OjU6NT41QjVKNU41TjVONVY1VjVeNVo1WjVWNV41YjViNV41XjVmNWY1ZjVmNWI1YjVmNWo1ZjVqNWY1ZjVqNWo1bjVqNW41bjVuNW41bjVyNXY1ejV6NXo1ejV6NXY1ejV6NX41gjV+NYY1hjWGNYY1ijWKNY41ijWGNYo1ijWONY41jjWONZI1ijWONZI1jjWONY41jjWKNYo1hjWGNYY1hjWKNYo1ijWKNYo1ijWKNY41ijWKNYo1ijWKNYo1hjWKNYo1hjWCNYI1fjV6NXo1djV2NXI1cjVyNXI1cjVyNXI1cjV2NXY1cjV6NX41gjWKNY41kjWaNZ41njWeNaY1pjWmNaY1pjWmNao1sjWyNa41rjWuNa41qjWqNaY1qjWqNa41rjWuNbI1sjWyNbY1sjWuNa41rjWuNa41qjWqNa41qjWmNaY1ojWaNZo1ljWaNZo1mjWaNZo1mjWeNZ41ljWaNZ41mjWeNaI1ojWqNao1sjWyNbY1tjW6Nbo1vjXCNcI1vjXGNcI1xjXKNco1zjXONdI11jXWNdY12jXaNdo11jXWNdo12jXeNeI15jXmNeo16jXqNe416jXqNe417jXyNfo1+jYCNgI2BjYKNgo2BjYGNgI1/jYCNgI2AjYCNf41+jX6NfI17jXqNeY14jXeNdo13jXaNdY12jXaNdY12jXSNdI11jXWNdY12jXWNdY12jXaNd414jXiNeI15jXmNeI15jXmNe417jXuNe416jXqNfI18jXyNfY1+jX6Nfo1+jX6Nfo1+jX+Nf41/jX+Nf42BjYGNgY2BjYKNgo2EjYSNhY2GjYeNh42IjYiNiI2HjYiNiI2IjYeNho2GjYaNho2GjYWNhI2EjYKNg42DjYKNg42DjYSNhY2EjYWNho2IjYeNiI2IjYeNiI2IjYiNiI2IjYiNiI2HjYeNh42FjYSNg42BjYCNgI2AjYCNgI1/jX+Nf41+jX6Nfo1+jX+Nf42AjX+NgI2AjYGNgI2BjYCNgY2BjYKNgo2BjYGNgI2AjX+NgI2AjYCNgY2CjYGNgo2DjYONhI2EjYSNho2GjYeNh42IjYiNio2IjYiNiI2IjYmNiI2JjYqNio2KjYuNi42MjYyNjY2OjY+Nj42OjZCNkI2RjZKNko2TjZONk42TjZONk42TjZONk42TjZKNko2SjZKNko2TjZONlI2VjZWNlo2VjZWNlo2XjZeNl42YjZmNmo2ajZyNnI2bjZuNmo2ajZqNm42cjZyNnY2djZ2NnI2cjZuNmY2ZjZeNl42XjZaNlo2WjZWNlY2UjZONk42TjZKNk42TjZKNko2TjZONlI2UjZWNlo2VjZaNlo2WjZeNl42WjZaNlY2UjZSNlY2WjZaNlY2WjZaNlo2VjZaNlY2VjZWNlI2VjZaNlY2WjZeNl42XjZaNlo2WjZWNlY2VjZWNlo2YjZmNmo2bjZyNnI2djZ2Nno2fjZ6Nn42fjaGNoo2jjaSNpY2ljaWNpo2ljaWNpY2ljaWNpo2mjaaNqI2njaeNp42njaiNpo2mjaSNpI2jjaONpI2kjaSNpI2kjaWNp42mjaeNp42ojayNqY2qjayNrI2sjayNrY2tja6Nro2sjayNrI2rjauNq42rjauNq42rjauNqo2rjauNrI2tjayNrI2rjauNrI2sjayNrI2tja6NrY2tjayNrI2sja2Nq42rjaqNqY2pjamNqo2qjaqNqY2pjamNqI2pjamNqI2pjaiNqI2pjaqNq42sjayNrY2sja2Nro2vjbCNsI2xjbKNs420jbWNto23jbiNt423jbaNto21jbaNtY23jbaNto23jbeNt423jbiNto23jbaNtI22jbeNuI25jbqNuo26jbmNuo26jbmNuY24jbeNuY25jbiNuY26jbqNuo26jbmNuY26jbqNuY26jbqNuo27jbuNuo26jbqNuo26jbqNuY25jbmNuY25jbmNuY26jbmNuY25jbmNuo27jbqNuo27jbuNu429jb6Nvo2/jcCNwI3AjcCNwI2/jcCNv42/jb+Nv42/jb+NwI3AjcGNwY3CjcKNwY3CjcONw43EjcWNxI3EjcWNxI3FjcWNxY3EjcWNw43DjcKNwo3CjcGNwY3AjcGNwY3CjcONxI3EjcSNxo3HjciNyI3JjcqNzI3Mjc6Nz43QjdKN043UjdSN043TjdWN1Y3UjdSN1Y3TjdON0o3SjdKN0I3Qjc+Nz43Ojc6NzY3Njc2NzY3NjcyNzI3LjcqNyo3JjciNx43HjceNx43HjcaNxo3HjciNx43IjceNx43IjciNyY3KjcyNzY3Ojc+Nz43RjdGN0o3SjdON0o3UjdWN1o3XjdiN2o3bjdyN3I3ejd6N343fjd6N3o3ejd6N3Y3ejdyN243bjduN2o3YjdeN143WjdWN1I3TjdON0o3SjdKN0Y3TjdSN1I3UjdWN1I3VjdeN143YjdiN2Y3ZjdqN2o3cjdyN3Y3ejd2N3Y3cjdyN243bjduN2o3bjdqN2o3ZjdmN2Y3ZjdiN2Y3YjdiN2o3ajdyN3I3cjdyN3I3ejd2N3Y3djd6N343gjeGN4o3jjeWN5Y3kjeSN5Y3ljeaN543njeiN6Y3qjemN6o3rjeqN6I3ojeiN5o3ljeaN5o3njeeN543mjeWN5I3kjeON443jjeGN4Y3hjeGN4I3hjeGN4Y3gjeGN4Y3ijeSN5I3mjeaN543ojeiN6I3ojeqN643sje2N7o3ujfCN8Y3wjfGN8Y3xjfKN8o3zjfON9Y33jfmN+o36jfyN/Y3+jf+N/43/jQGOAY4CjgSOBI4GjgeOCI4IjgiOCI4IjgiOCI4HjgeOB44HjgeOBo4GjgWOBY4EjgOOA44BjgGOAI7/jf6N/o3+jf+N/o3+jf6N/Y39jf2N/Y38jfyN/Y39jf2N/Y38jf2N/I37jfqN+Y35jfmN+I35jfqN+o35jfqN+438jfuN/I39jf2N/Y3+jf+N/40AjgCOAI4Ajv+N/o3+jf+NAI7/jf+N/43+jf6N/o39jf2N/Y39jf2N/o3/jf+NAI4AjgGOAY7/jf+N/o3+jf6N/o3/jf+N/43/jf6N/o3+jf6N/43+jf+N/o3+jf6N/o39jf6N/o3+jf6N/o3/jf+NAI4CjgGOAY4BjgGOAY4BjgKOAo4DjgSOBY4GjgaOBY4GjgWOBY4EjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgKOAo4CjgOOA44EjgWOBo4GjgaOBY4FjgSOBI4EjgWOBI4EjgKOAo4DjgSOA44DjgOOBI4EjgSOBo4FjgeOB44HjgiOB44IjgiOCY4JjgmOCY4JjgqOCY4KjgqOCY4KjgyODI4Ojg6ODo4RjhKOE44UjhWOFo4XjhmOGo4bjhuOHI4ejh6OH44gjiCOIY4ijiGOIo4ijiGOI44ijiOOIY4hjiGOIY4gjh+OHo4cjhyOGo4ajhyOHI4bjhqOGo4YjhiOGI4ZjhiOGI4YjhiOGI4ZjhmOGI4YjhmOGY4XjheOGI4YjhiOGI4ZjhiOGo4ajhqOGo4bjhqOGo4bjhuOHI4bjh2OHY4djh2OH44fjh+OH44fjh+OII4hjiGOIo4hjiKOIo4ijiOOI44jjiSOJI4kjiOOI44kjiSOJI4jjiOOJI4ljiaOJo4njiiOKI4pjimOKY4pjimOKY4ojiiOJo4njieOJo4ljiSOI44jjiOOIY4gjh+OHo4cjhyOG44cjhyOHI4ejh6OHY4djh2OH44ejh6OHo4ejh+OIY4ijiOOI44kjiSOJI4ljieOKI4pjiuOLY4ujjCOMY4xjjKOMo4zjjSONY42jjiOOY46jjuOO448jjyOPI4+jj6OPo4/jj+OQI5BjkGOQo5DjkKOQ45EjkWORY5FjkWORY5EjkSOQ45DjkOOQ45DjkGOQY5AjkCOQI4/jj6OPo49jj2OPI47jjuOPI48jj2OPo4+jj6OP44/jkCOQI5AjkCOQI4/jkCOQI5AjkCOQo5BjkGOP44/jkCOQI5BjkGOQY5BjkOOQo5CjkOOQ45EjkaOR45IjkiOS45MjkyOTY5Njk6OT45PjlGOUY5TjlSOVI5UjlSOU45UjlKOUo5RjlCOUI5PjlGOUI5QjlCOTo5NjkyOS45LjkmOSI5GjkaORo5GjkWORY5EjkOOQo5Ajj+OP44+jj6OPo49jj6OPo5AjkGOQY5CjkOOQ45EjkSORY5FjkaORo5IjkiOSI5IjkmOSY5KjkmOSY5JjkiOR45HjkaORo5GjkaOR45HjkaOSI5HjkiOSY5IjkmOSY5JjkmOSI5IjkqOSo5LjkyOTY5Mjk2OTo5Njk2OTo5Pjk+OT45PjlCOUY5UjlWOVY5WjlWOVo5WjlaOV45XjleOWY5ZjlmOWY5ZjlmOWY5ZjliOWI5ZjlmOWY5ZjluOW45bjluOXY5djl6OXY5ejl6OYI5hjmGOYY5ijmOOY45jjmSOZI5ljmWOZY5ljmWOZI5ljmWOZI5jjmGOYY5ijmOOYY5hjmGOYY5fjmCOYI5gjl+OX45gjmGOYY5jjmSOZo5mjmaOZo5mjmeOaI5pjmqOaI5ojmiOZ45pjmeOZo5ljmWOZI5kjmSOY45jjmSOY45ijmGOYY5hjmGOYo5ijmKOZI5ljmaOZo5njmeOZ45ojmiOaI5ojmmOao5rjmuObI5sjm2ObY5tjm2ObY5tjm6Ob45wjnCOcY5yjnOOco5zjnOOdI50jnSOdI50jnWOdY51jnSOdI5yjnKOco5xjnCOb45wjnCOb45ujm6ObY5tjm6ObY5tjm2ObY5tjm2ObY5sjm2ObY5ujm2ObY5tjm2ObY5tjm2ObY5tjm2ObI5tjmyObo5ujm+Ob45vjm6Obo5tjm6Obo5sjmyObY5sjmyObI5sjmyObY5sjm2ObY5tjm2ObI5sjm2ObY5sjm2ObI5sjmyObY5tjmyObY5sjmuOao5qjmqOa45sjmyObI5sjm2Obo5vjm+OcI5wjnCOco5yjnOOdY51jnaOdo51jnaOdo55jnmOeo57jnqOe457jnyOfI58jnyOfI59jn+OgY6DjoSOhI6FjoSOhY6EjoWOho6FjoaOhY6HjoeOiI6JjoiOho6FjoSOhI6EjoOOg46CjoOOg46DjoKOgo6AjoCOgI5+jn6Ofo5+jn+Ofo5+jn6Ofo5+jn6Ofo59jnyOfI59jn6Ofo59jn6Ofo5+jn6Ofo5+jn+Ofo5/jn+OgI6AjoGOgo6DjoOOhY6FjoWOhY6GjoiOh46HjoiOiY6LjouOi46MjoyOjY6Ojo+Oj46QjpKOko6TjpOOkY6TjpOOk46TjpOOko6TjpKOko6TjpKOkY6Qjo6Ojo6QjpCOkI6RjpKOkY6RjpGOkY6SjpOOlY6WjpaOl46YjpqOm46bjpuOmo6ajpqOmY6bjpuOnI6djp2OnI6ajpqOmY6YjpaOlo6VjpWOlI6UjpSOk46UjpKOkY6Qjo6Oj46PjpCOj46QjpGOko6SjpGOkI6SjpOOlI6VjpWOlY6WjpeOmY6ajpqOmo6djp2OnY6ejp6On46fjp+Ono6fjp+On46gjp+On46djp2OnY6cjpqOmo6ZjpiOmI6YjpeOl46YjpmOmY6YjpeOmY6ZjpqOm46bjpyOno6ejp6OoI6hjqGOo46jjqOOoo6jjqSOpY6ljqWOpY6kjqSOo46jjqOOo46ijqOOo46jjqSOpY6kjqSOoo6ijqGOoo6ijqOOo46kjqOOoo6jjqOOoo6ijqKOoo6hjqKOoo6jjqSOpY6mjqeOpo6mjqeOqI6ojqiOqY6rjqyOrI6tjq2Oro6ujq+OsI6wjrGOso6yjrKOso6yjrOOtY61jrSOtI61jrWOtY62jraOto62jrWOtI61jraOto62jraOto60jrSOtI6zjrOOso6xjrGOsY6xjrGOso6wjrCOsI6wjq+Or46vjq6Or46vjrCOsI6wjrGOsY6wjq+Or46ujq6Oro6tjq6OrY6ujq6OsI6wjrCOsY6vjq+Or46wjrCOsY6yjrOOtY61jrWOto63jreOuo66jrqOuo67jr2OvY69jr2OvY6+jr+Ovo6/jsCOwY7BjsCOv469jr2OvY6+jr6Ovo6+jr2Ovo6+jr+Ovo7Ajr6Ovo6+jr2OvY69jr+Ov46/jr+Ov47AjsGOwY7BjsGOwI6/jr6Ovo6+jr6Ov47AjsGOwY7AjsCOwI7AjsGOwY7CjsKOw47CjsSOxI7EjsOOwo7DjsKOwo7BjsKOwo7BjsCOwI7AjsCOv46/jr+OwI7AjsGOwY7DjsOOxI7FjsWOxo7HjsiOyY7JjsqOy47LjsyOzY7Mjs2Oz47QjtCO0Y7QjtGO0Y7RjtKO047VjtWO1o7YjtmO2Y7ZjtmO2Y7ZjtiO147XjteO147YjtiO1o7WjtWO1Y7UjtOO047TjtOO047SjtKO0o7SjtKO0o7SjtGO0Y7TjtOO047UjtSO047TjtOO0o7TjtWO1I7VjtWO1Y7WjteO2I7YjteO147XjtiO2I7YjtiO2I7ZjtmO2I7bjtuO3I7cjtuO2o7ajtuO247bjtuO2Y7ZjtqO2Y7ajtqO247bjtuO2Y7YjteO147XjteO147ZjtiO2Y7ajtyO247bjtuO247bjtuO3I7cjtyO3Y7fjt6O347fjt6O3Y7cjt2O3Y7cjt2O3o7djt2O3o7fjt+O4Y7hjuGO4o7ijuOO447kjueO5o7mjuaO547njuiO6I7ojueO6I7mjueO5o7mjuaO547ojumO6Y7pjumO6o7pjuqO6o7rjuuO7Y7tju6O7o7vju+O8I7xjvGO747vju+O747uju6O7Y7tjuyO7I7sjuyO647qjuqO6Y7pjueO5Y7ljuWO5o7mjuaO5o7njuiO6I7njueO547ojuiO6I7ojueO6I7ojuiO6I7mjuaO5o7mjuWO5Y7mjueO547njueO6Y7pjuqO647qjuqO647rjuuO7I7tjuyO7I7sjuyO647rjuqO6Y7qjuqO6Y7pjuuO7I7tju6O7o7tju6O8I7xjvCO8Y7yjvKO847zjvOO8471jvWO9Y72jvaO9Y71jvaO9o70jvKO8470jvWO9I7zjvOO847yjvOO847yjvGO8I7xjvKO8470jvWO9473jveO9473jvqO+o77jv2O/I78jv2O/o4AjwCPAY8BjwGPAo8BjwGPAY8CjwGP/47+jv2O/Y78jv2O/Y79jvuO+o76jvmO+I74jveO9473jvaO9474jvmO+I73jveO9474jvaO9473jveO9474jviO+Y76jvmO+o76jvuO/I78jv2O/Y79jv6OAI8AjwCPAY8CjwGPAY8BjwOPAo8CjwKPAo8CjwKPAo8CjwOPA48CjwKPAo8CjwKPAo8CjwKPAY8CjwKPAo8BjwOPBI8EjwWPBI8DjwSPBY8FjwWPBo8FjwWPBY8FjwaPB48HjwaPBo8FjwaPBo8GjwWPBY8EjwWPBY8FjwaPBo8GjwWPB48GjwiPCY8KjwGPDI8MjwyPD48PjxCPEI8RjxGPEo8TjxKPEo8TjxSPFI8UjxSPFY8WjxePGI8YjxePGI8YjxiPGI8YjxiPGo8bjxuPHI8bjx2PHY8ejx2PHo8ejx6PHo8fjx6PHo8ejx6PHY8djx2PG48bjxyPGo8ajxmPGY8YjxiPGY8ajxqPHI8djx2PHo8fjyGPII8ijyOPI48kjyWPJY8kjySPJY8ljyWPJo8ljySPJI8jjyKPIY8gjx+PHY8bjxuPGo8ZjxmPGI8XjxaPFo8VjxWPFY8WjxaPFY8WjxaPGI8ZjxmPGY8ajxuPG48cjx2PHo8fjx+PH48gjyGPI48kjyOPJI8ljyaPKY8qjymPKo8rjy2PLY8ujy2PLo8vjy+PLo8tjy2PLY8sjymPJ48ljyWPJo8ljySPI48jjyGPIo8hjyKPI48ijyOPI48kjySPJo8njyiPKY8ojyePKI8ojyePJ48njyiPKI8ojyiPJ48ojyiPJ48ojymPKI8ojymPKY8qjyqPK48rjyyPK48rjyyPLI8tjy2PLY8vjy6PLo8tjy6PL48xjzGPMo8zjzOPM480jzWPNY82jzaPN484jzqPOo87jz2PPY88jzyPPI89jzyPPI89jz2PPY89jz2PPo89jz2PPI88jzuPO487jzuPOo87jzqPOY86jzqPOo85jzqPOo86jzqPOo85jzqPOo86jzuPPI88jzyPPI88jz2PPI86jzqPOo85jzmPOY84jzePOI82jzWPNI8zjzGPMY8wjzCPMI8wjzGPMo8xjzKPMY8xjzKPMo8yjzOPNI81jziPO489jz+PP489jz+PP49Aj0GPQo9Dj0OPRI9Ej0WPRo9Hj0iPR49Gj0WPRo9Hj0qPS49Nj06PT49Qj1CPUo9Sj1OPU49Tj1KPUo9Sj1KPUo9Sj1KPUo9Rj1CPT49Oj02PTY9Mj0uPTI9Nj02PTY9Oj0+PTY9Oj06PTY9Nj02PTI9Mj02PTI9Oj02PTo9Mj0yPTI9Lj0mPSI9Kj0mPSI9Ij0iPR49Ij0iPSI9Jj0mPSY9Ij0qPSo9Kj0mPSo9Jj0iPSY9Ij0iPSI9Ij0iPSI9Ij0iPRo9Hj0iPR49Fj0aPRY9Ej0OPQY8/jzyPOo81jzCPLI8hjx+PHI8YjxWPEY8FjwOP/47DjsmMRYrqhxCGoYSOg9qCQ4LKgWeBI4HVgK2AkYCCgGyAXoBFgD6AW4CggKCBl4Kcg5OEgYVihg+HuIdOiNGIQ4m4iSyKoIr/ilSLp4sNjE6Mf4y6jAGNWI11jbCN7I0ZjjaOY46MjpiOo468jsSO147rjvCO/44FjxKPH48sjzaPQI9Jj0+PVo9dj2KPZ49tj3GPeI97j36Pgo+Fj4ePiY+Lj46PkI+Rj5KPk4+Vj5WPl4+Zj5mPmY+Yj5iPmI+Zj5qPmo+aj5qPmo+aj5qPm4+cj52PnY+ej56Pn4+fj6CPoI+gj6CPoI+gj6GPoY+jj6SPpo+nj6iPqI+nj6ePqI+oj6qPq4+rj6yPro+uj6+Pr4+wj7CPsI+wj7CPsY+yj7OPtI+0j7WPtI+1j7ePt4+1j7aPto+2j7WPtY+0j7OPso+xj7CPr4+uj6yPq4+rj6uPqo+rj6uPqo+qj6qPq4+rj62PrY+tj6+PsY+yj7OPtY+2j7SPtI+0j7SPtY+2j7aPtY+0j7SPs4+1j7SPtI+yj7GPsY+wj7GPso+yj7KPxI+zj7OPtI+1j7aPtI+2j7aPtY+2j7aPt4+2j7iPto+5j7qPuo+6j7mPuY+6j7qPu4+9j7yPvY++j76Pv4+/j8GPwI/Cj8GPwY/Aj8CPwY/Bj8GPwo/Bj8GPwo/Dj8KPwo/Dj8OPw4/Ej8SPwo/Dj8OPwo/Bj8CPv4+/j8CPv4++j76Pv4+/j72PvY+9j7yPu4+7j7yPu4+8j72PvY+9j7yPvI+8j72PvI+9j76Pvo+/j72PvI+9j76PvY++j72PvI+/j8GPwY/Aj8GPv4+/j7+Pv4+/j76Pv4/Aj8CPwY/Cj8KPw4/Dj8OPwY/Cj8OPw4/Ej8SPxI/Ej8WPxo/Ij8mPy4/Lj8qPzI/Mj82PzI/Mj82Pzo/Pj9CP0I/Rj9GP0Y/Rj9KP0Y/Rj9CP0o/Rj9KP0Y/Sj9OP04/Sj9KP0o/Uj9OP0o/Uj9SP04/Uj9OP1I/Uj9SP1Y/Wj9eP14/Yj9iP2Y/aj9iP2Y/Zj9mP2I/Xj9eP14/Yj9aP14/Xj9aP1Y/Uj9OP04/Tj9GP0Y/Qj9GP0Y/Tj9OP04/Sj9KP04/Tj9KP0o/Sj9OP04/Uj9SP1o/Wj9WP1Y/Wj9WP1Y/Vj9aP1o/Wj9eP14/Xj9eP1o/Wj9eP14/Yj9mP24/bj9qP24/cj9yP3Y/ej96P3o/fj+CP4o/ij+GP4Y/hj+CP4I/fj9+P3o/dj92P3Y/dj96P3Y/dj92P3I/bj9yP3I/cj92P3I/dj96P34/gj+GP4Y/hj+GP4I/hj+GP4Y/hj+OP4o/jj+SP5Y/nj+eP54/oj+iP6Y/pj+qP6Y/rj+uP64/sj+yP7Y/tj+yP7Y/tj+yP64/sj+uP7I/tj+2P7o/tj+2P7Y/sj+yP7I/qj+uP7I/qj+mP6o/rj+qP64/qj+mP6Y/oj+mP6I/pj+qP6o/rj+yP7I/sj+6P7o/sj+uP7I/rj+yP7I/tj+6P7o/vj++P74/wj/KP8o/yj/KP8Y/xj/KP84/yj/KP8o/yj/KP8Y/yj/KP8o/xj/KP8Y/xj/GP8o/zj/KP8Y/xj/KP8o/xj/GP8I/wj/GP74/vj/CP8I/wj++P74/wj/GP8Y/yj/OP9I/0j/SP9o/2j/eP9o/4j/eP+I/3j/iP+I/6j/mP+Y/5j/qP+o/6j/uP+o/6j/qP+4/7j/uP/I/7j/2P/Y/9j/2P/Y/9j/2P/o/9j/yP+4/8j/2P/I/8j/2P/Y/8j/2P+4/7j/uP+o/6j/qP+4/7j/yP/Y/+j/+P/o/+jwCQ/48AkAGQApACkASQBZAGkAiQCJAJkAmQCpAKkAuQDJANkA2QDJANkA2QDZANkA+QDpAOkA6QDpAOkA6QD5APkA6QDJAMkAyQC5ALkAuQCZAKkAmQB5AHkAaQBZAHkAeQB5AGkAWQBpAGkAaQB5AIkAmQC5AMkA6QEJARkBGQEZARkBCQD5AQkA+QEJAQkA+QDpAOkA+QDpAOkA6QDpALkAyQDZAOkBCQEJAQkBGQEZASkBSQFZAWkBaQFpAWkBeQFpAXkBaQFZAVkBOQFJAVkBWQE5AVkBSQE5ATkBSQFZAXkBmQGJAakBqQGpAdkBuQHpAdkB2QHZAekB2QHpAekB6QHpAekB2QG5AckByQHZAckBqQHJAckBuQHJAdkB6QHpAfkB+QIJAhkCKQIpAikCGQIpAikCOQI5AkkCSQJJAkkCOQI5AjkCOQIpAhkB+QHpAdkB6QHpAekB2QHpAfkB+QH5AgkCCQIJAhkCGQIJAhkCCQIZAhkCKQIpAjkCKQIpAikCGQIJAfkB+QHpAekByQG5AckB2QHpAdkBuQG5AbkBuQHJAdkByQHpAekB+QHpAgkCGQIZAhkCGQIJAhkCOQJJAkkCaQJ5AmkCaQJ5AnkCiQKJAokCiQKZArkC2QLpAvkC+QL5AvkC6QLZAtkC2QLJAskCuQLJAskCuQLJAskCuQK5AskCuQK5AskC2QLZAukC6QL5AxkDOQM5AykDKQNJA0kDOQMpAxkDCQL5AvkC6QLZAukC2QLZAtkCuQK5AqkCuQLJAtkCyQLJAukC+QMpAzkDOQNJA1kDaQOJA5kDqQOpA7kDyQPJA9kD6QP5BBkEKQQpBCkEKQRZBGkEWQRZBEkEWQRJBFkEOQQ5BDkEOQQZBCkEGQQJA+kD+QP5A9kD2QPpA8kDuQOJA5kDiQOJA5kDiQOJA4kDeQNpA2kDeQNpA1kDaQNZA1kDaQN5A4kDmQOpA6kDiQOpA8kDyQPJA+kD2QPpA/kD6QPZA9kDuQPJA9kDyQPJA7kDyQPZA9kDuQOpA6kDuQPJA8kDyQP5A/kECQQpBCkEKQQpBCkESQRJBEkEWQRpBGkEeQRpBFkEWQRJBDkEWQRZBGkEaQRpBHkEmQSJBIkEiQR5BIkEiQSZBKkEuQTJBNkE6QTJBLkEyQTJBNkE6QTZBNkE2QTpBQkE+QT5BQkE+QTpBPkE+QTpBPkE+QTpBOkE+QTZBNkE6QTpBNkEyQS5BLkEmQSpBKkEmQS5BLkEyQS5BNkEyQTJBNkE2QTZBOkE+QUJBSkFOQVZBVkFWQV5BVkFWQVJBVkFSQVpBWkFeQWJBXkFaQV5BWkFaQWJBWkFaQVpBWkFeQWJBZkFmQWZBZkFqQW5BbkFuQXZBdkF2QXZBbkFuQW5BbkFqQWpBakFuQW5BbkFuQWpBbkFqQWpBakFmQWZBZkFuQWpBakFmQWpBakFuQXJBdkFyQXJBckFuQW5BckFqQW5BZkFmQWJBakFqQXJBdkF6QXJBbkFyQXZBdkF2QXpBekF6QYJBgkGKQYpBjkGOQY5BkkGWQZpBnkGeQZ5BmkGeQaJBpkGmQaZBpkGmQaJBpkGmQaJBnkGaQZpBlkGaQZZBnkGiQaZBqkGmQapBqkGqQa5BrkGuQbZBtkG6Qb5BvkHCQcJBykHKQcZBxkG+Qb5BukHCQcZBwkG+QbpBtkG2QbpBukG6QbZBskGmQaJBpkGmQapBqkGmQaZBnkGiQaJBokGiQZ5BokGiQaZBpkGqQa5BrkGqQbJBrkGuQbpBukHCQcJBwkHGQcpBzkHOQdJBzkHSQdJB1kHeQd5B2kHiQeJB3kHiQd5B3kHmQeJB5kHmQeZB2kHaQdZB0kHOQc5B0kHSQc5BykHKQcpBzkHSQdZB2kHaQd5B3kHiQepB7kHyQfJB7kH2QfpB+kH+QfpB+kH6QfpB7kHuQepB6kHuQe5B6kHqQepB5kHmQdpB0kHSQc5B0kHSQcpBzkHKQcZBxkHCQb5BwkHGQcpBykHKQcpBzkHWQdZB3kHiQeZB6kHuQfZB/kICQhJCFkIWQhpCGkIaQiJCKkIuQjJCOkI+Qj5CQkJGQkJCQkI+QjpCLkIuQjJCLkIyQjZCMkIyQjJCLkIqQipCKkIqQipCLkIuQi5CMkI2QjZCMkIyQi5CKkIqQiZCKkImQiZCHkIeQh5CGkIaQhpCGkIaQh5CHkIiQiZCKkIuQi5CMkIqQipCKkIqQiZCIkIiQiJCGkIeQh5CFkIWQhZCDkIOQg5CDkIOQhJCGkIeQiJCJkIqQipCMkI2Qj5CPkJGQkZCSkJSQlpCYkJmQmpCakJiQmZCakJuQnZCgkJ+QoJCgkKGQoZChkKGQn5CekJyQm5CbkJ2QnZCckJuQmpCZkJiQl5CWkJaQlpCVkJWQlJCVkJWQlpCVkJWQlZCVkJaQlZCWkJaQl5CYkJmQmZCZkJqQm5CbkJqQmpCYkJqQmpCZkJmQmZCbkJuQmpCZkJiQmJCYkJmQmZCZkJmQmpCakJ2QnZCekJ+Qn5CfkJ6Qn5CfkKCQopCjkKOQo5ClkKSQpZCnkKiQp5CnkKeQp5CokKmQqJCokKqQqpCqkKqQqpCqkKqQqpCqkKiQqZCpkKuQqpCqkKqQrJCskK2QrJCskKuQqpCpkKiQp5CokKmQqZCqkKmQqpCrkKuQrJCrkKuQqpCqkKqQqpCskKyQrpCvkK2QrJCtkKyQrZCrkKqQqpCpkKmQqZCqkKyQrJCqkKqQqpCqkKqQq5CqkKqQqZCpkKqQqpCrkKyQrZCtkK6QrZCskK6QrZCtkK2QrZCskK2QrZCtkK6Qr5CwkLCQsJCxkLGQr5CykLSQs5CzkLSQtZC1kLaQt5C4kLmQuZC6kLmQupC5kLmQuZC7kLmQupC7kLyQvJC9kL2QvZC9kL6QvpC9kL6Qv5C/kL+QwJC9kL2QvZC9kL2QvJC9kL6QvpC/kL+QvZC9kL2QvJC8kLuQu5C9kL+QvpC+kL6QvpC/kL6Qv5C+kL2Qv5DBkMGQxJDEkMaQxpDGkMaQxpDHkMeQyZDJkMmQypDKkMuQy5DKkMqQyZDHkMeQx5DHkMiQx5DHkMiQyZDHkMeQx5DIkMeQyJDIkMmQyZDKkMuQy5DLkM2QzJDMkMyQzJDLkMuQzJDMkMuQy5DKkMuQypDKkMqQypDKkMmQyZDJkMqQypDLkMuQzJDNkM2QzpDOkM+Qz5DPkM+Qz5DPkM6QzpDOkM6QzpDOkM6QzZDNkM2QzJDMkMuQy5DLkMqQy5DLkMuQy5DLkMuQzJDMkMyQzJDMkM2QzZDOkM6Qz5DPkNCQ0JDQkNGQ0ZDRkNKQ0pDSkNKQ0pDTkNOQ0pDSkNKQ0pDSkNKQ0pDSkNKQ05DTkNOQ0pDSkNKQ05DTkNOQ1JDUkNWQ1pDWkNeQ2JDYkNmQ2pDakNuQ25DckNyQ3ZDdkN2Q3ZDdkN2Q3pDekN+Q35DfkN+Q4JDgkOCQ4JDgkOCQ4JDgkOCQ4JDhkOCQ4JDgkOCQ4JDgkOCQ4JDgkOCQ4JDgkOCQ4ZDhkOKQ4pDjkOSQ5JDlkOWQ5ZDlkOaQ5pDnkOiQUI18SrFDhUCwPnU9mzz7O4Q7KTvlOq86hTpkOks6NzooOhs6EjoKOik6CTv/O/Q86T3ePtM/yUC+QbNCqEOdRJNFiEZ9R3JIZ0ldSlJLR0w8TTFOJ08cUBFRBlL7UvFT5lTbVdBWxVe7WLBZpVqaW49chV16Xm9fZGBZYU9iRGM5ZC5l2HUtgcOBaIIRg7+DcIQjhdaFioY9h/GHpIhUiQOKr4paiwCMpoxJjeiNgo4bj62PPZDJkE+R1JFVks2SRJO3kyOUjpQAlWWVt5UUlmuWwZYUl2GXr5cCmDeYhpi5mASZMZl1mamZ2JkJmiuaVZqImrGa25r+miabP5tkm4ebtZvWm/WbGJw3nGKccpyRnKqcyJztnAmdF50wnUmdYp16nZKdn524nc6d5Z39nRSeK55CnmSeep6PnqWevJ7Rnuee/J4RnxufL59Dn1afa59+n5Gfo5+2n8if25/unwCgEqAkoDagSKBaoG2gfqCQoKGgs6DEoNWg56D4oAihGKEpoTqhSqFaoWqheaGJoZihp6G2ocSh1KHjofKhAaIRoh+iLqI+okyiW6Jqoniih6KWoqOisqLAotCi36LtovuiCqMYoyWjM6NBo06jW6Noo3WjgqOPo5yjqqO2o8Ojz6Pbo+ij9KP/owykGKQkpDCkPKRJpFWkYaRtpHikg6SPpJqkpaSwpLukxaTPpNuk5aTxpPykB6URpRulJqUxpTylRqVSpVylZ6VwpXulhqWRpZylp6Wzpb2lxaXOpdml5KXtpfilAqYLphamIKYqpjWmP6ZJplKmXKZmpm+meKaDpo6ml6agpqqms6a8psamzqbYpuGm6qb0pvymBqcQpxenIKcppzGnOqdDp0ynVaddp2Wnb6d4p3+nh6ePp5mnoqeqp7OnvafEp8yn1Kfep+an76f4pwCoC6gRqBmoI6gsqDWoPahDqEyoVKheqGeocqh8qIWojaiWqJ+oqKiwqLqoxajNqNeo4KjpqPSo/qgGqQ6pGKkhqSmpMKk6qUGpSqlRqVmpYqlpqXCpd6l+qYapj6mYqaGpqamvqbipwKnKqdOp26njqeyp9Kn7qQKqDaoWqh+qJ6ouqjWqOqpCqkyqUqpaqmOqZ6pzqnqqhKqMqpeqn6qmqq+qtqq/qsiq0arbquKq6arvqveq/qoIqwyrE6saqyKrKKsxqzirP6tHq02rVKtaq2Graatzq32rhKuMq5arn6uoq7Cruau+q8arzqvVq96r5avsq/Gr+av/qwasDKwUrBusIqwqrDCsNqw/rEasTaxUrFqsXqxkrGysdqx+rIisjqyTrJqsoKyorK6stay9rL+sx6zNrNas3azorPKs+awCrQetDK0VrRytI60prTCtN60+rUWtTa1TrVmtXK1irWetaa1vrXKteK2ArYWtja2RrZetnK2hraitq62yrbitwK3Ircqtzq3Xrd6t5K3srfCt9q36rQOuB64RrhmuHK4iriquM645rkCuTa5WrluuYa5mrm+udK54rn6uha6QrpCulK6ZrqOuqq6rrq+uta65rr2uwa7Ersyuza7Trtuu367kruau667vrvau+K76rv+uB68LrxCvF68hrySvKa8yrzmvP69Hr0yvUK9Vr12vYq9or2+vdK91r3yvha+Nr4+vmK+Zr56vpK+pr6+vtq+9r8evz6/Wr9uv3q/mr++v+K/7r/6vA7AGsA6wE7AasCGwJrArsDGwN7A4sD+wSLBQsFOwWbBZsF6wZLBqsHOwe7CAsISwiLCNsJOwl7CbsKKwrbCxsLewvbDBsMewzLDSsNyw3rDmsOiw7bDzsPmwALEMsRWxGbEZsRuxIbErsTGxO7FBsUexTLFUsVmxXrFksWyxcbF0sXexc7F7sX+xhLGKsZKxlrGXsZuxorGlsaaxp7GtsbKxuLHBscGxx7HPscqx17HYsemxBbL+seKxDbIFshSyW7I9si2yO7I2sj2ySrJNslayXbJZsliyYrJnsm2ycbJ1sn2yf7KKsoyylrKgsqGypLKqsrGyrbK7ssSyyrLPstKy3bLrsuSy7bL0sviy/7IDswmzD7MWsxizHrMhsySzLbM4sz2zPLM+s0SzTLNKs1OzWbNos2GzWbNls2ezbrN1s3mzgbODs4aziLOPs5qzprOts7WzvbPCs8ezzbPPs9iz3rPgs9uz37Pms+qz6rPvs/Kz8rPxs/Gz+rP9s/6z/7MCtAK0H7QUtBy0LrQ6tDa0qLRJtGK0SbRRtG60ObSFtIi0hbR/tOm0gbSOtJK0mLSYtJq0n7ShtKO0pLQQta20dbSxtCO1I7XAtMm0N7XVtDy11bThtFC157RQtVm19LRotfa097R1tYC1fbUFtYy1jbWRtZe1nrWptbq1xrXKtdO1z7XZtdm12rXntee16rXytfq1/7UNthS2FLYatiG2F7YXth+2JbY1tjK2MbYvti62PLZAtk22T7ZNtlO2W7Zitmm2Z7Zutm+2b7Z6tn+2i7aTtqe2tLbAtsa2w7bJtt222bbetua267b1tgC3BrcRtxC3GLcYtxq3IbcWtwu3E7catxu3HLchtyu3Jrcxtzy3PrdLt1S3X7ddt2u3fLd1t4C3jbeYt5e3obett7W3sbe9t7e3sre/t7m3uLe4t8C3u7fCt9K33bfgt9+367fmt9+34rfnt+238Lf2t++3+LcDuAm4DLgOuBW4EbgRuBu4HbgpuDG4O7hMuFS4XrhiuGe4cLhyuGm4abhsuHe4dLh5uIG4gbiEuIG4hriRuIy4kriXuKe4uLjDuNG42rjmuOm49bjzuAC5/7j7uAa5DrkOuQ25FLkWuQ25BbkEuQm5CbkauRy5MrkvuT+5OblCuVi5YblhuWe5abljuWu5cbl+uXq5gLl+uYK5grmDuZC5j7mkuaq5mrmZuZ25rbm0ubi5vbnIuc2537nnueq54rnpueu57Lnsueq59rkHuhK6DLoKuhK6JLowui+6N7osuiu6Nbo6ukC6QLpBukW6TrpLuka6Sbpbulm6UrpYul+6brp+uou6hLqVupO6jbqVuqW6p7qhup26rLqkuq26srrLus26xbrAurG6vrrLusO62rr5ugi7BrsIuxC7HrsouzK7M7tCu0y7TLtTu2G7a7twu3K7brtzu227Zrtou3m7ibuTu567nbueu5m7e7t5u4i7i7ubu5u7tLvHu7y7ubu4u7i7ubu+u8q7wLvUu+C7+7sbvDO8KrwqvCO8IrwXvAy8J7wxvD+8Qbw5vDK8LrwvvDS8PbwovCC8GrwxvDy8O7wwvDa8QbwwvD+8RbxWvHa8erxzvH28fLx9vH68jrygvI68iryYvKe8r7y5vMW8x7y8vLi8qby3vLi8vLy2vLK807zUvMe8x7zIvM+837zvvAC9Fb0DvR69GL0jvSe9Nr08vVW9Wr0+vUK9Sr1dvWG9db1yvWi9YL1NvVa9Vr1wvYG9gL2DvZK9i72cvaO9pb2vvbK90r25vca9ur29vdi9373fvcK9rb2zvbe9ob2kvZa9r722va69w723vb69yb3Zvdu90L3fvd+9BL4fviy+Rb5gvmS+Xb5OvlW+aL5lvm6+cr5svn2+er5xvnG+dr5jvlm+Rr4+vkO+T75xvoe+jL6Wvn2+dL5yvnu+e76Fvp6+mr6dvre+xb7fvuu+677jvtK+z77fvti+7r7svg6/Cb8Nvx2/KL8qvzq/Sr9Iv0e/Pb88vz+/R79Tv0u/XL9yv4e/fb91v2q/YL9Yv02/R78+v1a/bL+Bv4W/nb+pv7u/tL+ov5W/rb+xv8u/yL/Zv+K/AcAYwCDAD8AIwADAA8ACwAzAB8Dfv9i/1L/gv9a/5b/3v/i/7r/3v+2//r8ewCLAEsAYwA/AIMAXwEfAdsCOwHbAlcCDwILAlsCcwKDAo8CdwHvAbsCRwKDAs8CIwJjAqcCSwJTAp8ClwKPAqcCkwLDAu8DCwMnA1sDcwNjA08DVwOnAAcH8wAHBDMEEwf3AEMEVwRPBL8EQwQnBBcEDwRfBLsEjwSjBI8EhwSHBCsEOwfjA68D+wBTBK8EawTjBT8FFwVzBWsE2wVHBWcFwwWLBcsGrwZ/Bp8HIwaTBnsGowbfBvMG6wcnB0sHewefBBsIAwv3B+8HsweHB9sEWwgnCOcI/wjrCNsJXwlzCaMJXwlvCYMJPwmPCYsJfwmzCbsJswnjCf8JowljCZsJTwjbCNMJPwnzCcsKJwn7CfcKgwpbCpsKrwqrCmsKewq3CxsKlwrHCzcKxwpnCfcJnwmDCf8KKwmLCicJ0wnXCicKmwp7ChsJzwoXCo8KJwpvCr8LKwt3C+sLLwrvC9MLxwgrDAcPfwt/CBcMyw2jDYsNZw3LDd8NSwyXDScNUw5DDkMNzw4zDlMORw7PDtMOow5jDhsOow7bDoMO8w87D08Paw6/DlMOYw8PDvMO1w5TDmMNxw23DZcNcwyzDBcMCwxPDI8NJw0nDdcOmw6XDkcOCw4rDusOyw8vD/MMcxEvEWcR9xKjEqMSnxJ3EwMTVxMDEycTLxMPE68TpxAvFFcUjxQrF8cQGxRrFCMX/xP3E58S0xJ/Eg8SYxJvEwMR/xLHEo8SPxHHElMSSxKDEr8TexODE4cQUxRrFNMVUxV/FV8VsxZvFlcWcxeDF3cXaxbnFrMWzxXvFlsWjxZjFrcWSxWLFXsVQxSzFAcXmxPfE2cTpxO3EJMVdxTPFR8VQxSbFRsVVxUDFhMVoxXHFlcW4xc3FvcXwxQzG88XOxcHF0cX9xQXGQ8YVxhDGIMYVxk/GiMZQxnHGisbOxqXGe8ZixnDGWsaDxj/GLcY4xjHGO8Zmxn3GhcZZxnvGhsZ7xkXGRcYRxmnGdcaixp3GpsbAxpnG2caoxrzGj8Z6xnvGm8aNxnTGa8aIxsnGjcauxofGh8acxp3GnMbAxgjHCcc0x1zHSschxxLHKcdtx1bHh8f0xyLI6MczyDvIU8hXyCHIAMghyDPIy8clyAbIIsjyx5LHo8e5x2HHIcd8x2LHhsdlx4HHWsdgx0THMMdtx1vHfsdEx3PHj8d3x1THZcdQx0LHNcctx0/HgMeix47Hksd3x2PHZceHx8DHi8e9x9PH1sfIx9XH+8fax9zH0seix4fHsceWx3vHjceex4jHm8e6x77H4ccRyBzITsjjx/zH2cfzx/bH/sc/yDLImsiqyHnIX8hoyIfIVcgwyOnH4Mf6x2fIhsi8yKfIwMixyHvIishmyFHIesimyNXIEskWyRLJFskoydrIyMi5yKjIg8iZyMnIncibyLHIHcmByaXJfMlPyW/Jkcm5yb7JB8rVyZzJislVyQ7J7sjLyOLIosguyJTHSsdNxxXHDMfTxobGmMZrxjvGHsaWxVbF18RSxNHDQ8PEwqDCJsKmwb3ASMAFwIa/ur4Hvuy9kr0+vSm9EL0TvR+9Mb1LvXa9s73svfq9Pb6Qvhe/h79TwNbAz8GWwrrCLsOzw0fEpMRgxcHFAsZWxtnGTMd5x+rHzcdeyJjI4cgGyR7Jb8kAyg/K48krysTJ/8krynvKa8r8yUzKU8q8yp3KwcrTyufKwcrTyrbK+8pmy33L28u5y+LLoMuhy0fMiszCzIHMO8xXzA/MW8yrzLzMYcz6y+/LP8zny/fL1cvyy+XLa8tay5zLpMvoyyrMWsytzOHMicxnzIzMF8z0ywjMx8uiy7TL6MsxzNLLb8tOy3DLMMtfy5bLfMu3y2jMd8yMzNDM/8wDzW7NIs0AzQDNnc22zbzNOM1VzQXOXc1fzS7NxczkzCXN4szTzDLNGs1pzU/NCM23zKvMDc0jzUXNZ8wwzIHLhcvVy97LP8wtzEHMSMxwzJXMUsxnzEzMW8xHzHDMIMxHzK3MEM1VzbDMv8ylzGjMUcwtzDfMUsyVzMXMVc2CzQzONM54zonON847zhrO087XzpDOq84bz23PE88Hz1/PEc87z5TObc5Azj3O/M0YzkLONM5nzWTNR82dzWvNWs0azrHNac2Jzd7MbM1PzYLNrM3ezQPOFc5UzmPP585Iz0DP0s6hzizOA85Rzs7O9857zsHNbs0KzezM8sxfzRbNx8y0zM7MaszmzMjMh8zyzKHMcsyzzAvNJs3HzN7MYs1rzSXNQM0Tzb3Ngs0FzrXN7M0QztLNhc6BzpzOPs6YzlzPbc9Kzw3Pg87KzkbPA8+JzhXOHs4VzlrOcM4uzjnOWs62zi/Plc9Mz6fP9c/D0I7QE9Ag0CfQzdCt0HzR0NCc0YnRcdGy0GHQCtCLzwHQus9hz8LOAc/5zlLPos+8zynQ6s/mz1/PE9AZ0DzQX9Dvz4fQ/M9rzwnPA9Ae0JDQNdBc0ITQmM/7zpXPHtA1z/3OQM9lzwfQ789F0HHR1tJl0n7R5tBx0IDQHNA/0ebRL9EY0RPR3tDe0ErQ6s810OvQB9BEzwHP0843z9LPos/bz23POc9rz6DPMNDbz1TPds/Lz/XOE8+Hz4LQX9Aq0WTR0NCr0IfQ9dC80PrQ+M81zxfQwdC10DfRr9Gy0UfRKdD4zznQp8+Rz5XPY8+TzzPQPNAC0dbRWdHZ0AzRHtCc0F/PMc+cz8nP0M9V0JnRxdEl0pnRCdHN0J/QUdBY0EfQyNAl0QLRidEO0h/SA9KB0UzRtdC30GrQHtBV0A7QKdAw0DXQ1dB90InQOdCt0LLQTtBC0crRZNGW0QXSfdJu0gvSsdJo0ozSedMM08zTn9IM03TSFNI20lzRCdFJ0VTRgdG10BPRBNHQ0NfQ19C+0DLRp9G90ijSPNLE0vnSVNOG0hTSv9EE0dPR3dKK05jTV9PF0zrTXNIq0ZzQidAl0cjQ3tAc0GbQbNGM0RfS4dG30bfRfNEf0kfREdFe0crRWtL60TLRBNGE0JnRS9Kc0SjRKNEg0bzQ0ND60PzQyNGp0crRF9JF0i3T69OK1Z/VqNVs1dTUHdWo1a3VMdUB1gzY6deW133YlNk12OfYcdhY2C/WKdgX2N7Wztj02EvWOdZj1lXUUdPH0mjSANKv0TnS49EZ0lHSqNKW0uPR+tG60U/RqNKM0rTSutNh0wTUfNMs1H/UMNS+06LSnNFk0TXRdtHW0bLRq9Ls0g/TJtOf0rrShtK90n3S2NGG0jDTjdM31GTUz9Ox1BTVTtXQ1DfUHtQI1HzTR9Pd0+DUyNQA1ZnUAdQh1bXUvtUG1mTU+NTo1K3V+NXt1pDXt9n523fa+tgv2FjYMNdM2LHXZdes1/XXF9gv2LfZDNib1wvXZNjC18fXrNYw11rXNdc12PXXrtgV2onYfdgB2XHY79X01RjWANX/0k3Tx9K30kvSzdLs0q/REdJx0RnSutKY0+bSpdLv0wTUE9PI1GjVl9WO1jrXedlv2lHbKNyG2rrbt9ne1j3WO9g82c3XZdcr13DVutWO1f3TGtTP05TTXtON09PTUdPI03PUhtPa00fTitOK08jUrNZr2AbYHdgV2oDXS9Z617TYL9ib2H3Yptfv10DXT9fP1kvWOtfK1gzVzNTo1CnTfNPo06nTmNN808/TZdOl093TD9Ow0+vTFNXA1L7TedPd0lXUU9W+1fjVStVV1lDWRtW11evVHdXt1gTV6NQt1TvUKdVX1fzWY9U+1bnUd9QI1GXTZNQI1WPVD9b716bXG9nN2V3Zqdm72IDZJNr22lrbj96W4NjiG+AM3PnbDttr20nbV9lX2WDahtrn2GDaMNtC2uLZDtt52WvY3tcv2BTZa9n62AzYR9bo1nfYC9cg1yTaKdix1ivWAdf91azWNdcw10fYANis11rXm9cv2EDXRtV119TVBNU+1W/Xatfr1W3WwNax1o7Wn9Ut1S/WStdl17TYzdqN3Sva99xS3sLew9uf2zvc59uo2/7azdrl2gfZrNbZ1sDWgNYr14rV9NSo1SHV69W11JfVFNVw1SnVBtYb1zDXStfT1+PWytbD1bzUl9Vo1uLVW9XA1NDVktUd2H3YDNjt1srW/Nbb2Zzczdpa29veUt523qjew9/v3yLe3N3N2qjYTNjH2H7a29kW21fZG9f717fXEde816jYZNlS2HrXa9nO2ELapdpY2r3aKNlS2PzWkNdJ2QfZm9kO2bDZL9gp2EHY1NnN197X7dg82Q7Zothx2HLZFdr+2t3aUdrF2Q7aL9jO2PrYFNlr2Z7anNyG2RTZ+tgv2JvY4dj716fWfdUB1lXWsdcG2BHXx9Ub1wzYa9gB2aLYL9h32IXXsdfF1qLY2thA29zdj97/2YDZftrw23fa/NYG10LVC9eD2NnWF9i311jYAdfi1cPVV9Xo1DXVgdVT1ejUz9No1oDWzddK1w/WhdfT17vW79VQ1lDZG9l615XYvtlA2/Pd0N1L3X7aotna2CHZFdqO2mHdtuHv8wfoG+B+3EDbB9kd2DXYhdbe1rHXt9cv2HfYkNeb2DDXPdZQ1u/V99Zr2YXbKt8q327jnN7n2xbdjd3+3Tbd99xB3eLcNt0h3ajbu9hr2EDX3dUv1nXX5NfU2SLed91r2zDbH9zD27ndrt3g32/fat523gzd3ts23Zzcutvp2bDZBthf1+Xaxdpr273aZNm818HY3teu2Lrc/d+v4qPk7eI54kLj+OCj5PHkDOBf4oPeON+C3YPeYtvY3G/fp98D3FfZQtqe2h/bDN3P3rXeF+PX5CzjB+j///////////////8E7+zs/////z/rr/jC7ULl2+Hc3SLea9xE3O3YhtkU2f/ZUthx2EnZDto62nHYXtj31srW2th32mfa/9k12TzZ3tvz3efdat7G4LXfutzn3UvdAOKz5SflJ+WY3yXiyOYC4/jo2+G130bej97i3GvcJ9uI3LrbfNu92vDZJ9vt2KLZx9hr2RTZjdnV22faYttX3LDZb9rM23zbhtpR2pTZ/9l02wHdztw73BvZBtuf2yHZvtn713XX2tii2EnZQ9ml2knbxdoz2hzahduG2q7YgNmu2GTZSdsO243dCOEq5nzom+PI5l7lBO/////////R+ezsf/D///////+v7gjrveTv38/exuBz513hmN/P3ljgYd0d3/3fO+Hp8LPlaOZM4pviw+IM5ajmCOtJ4P3f295n4Bnh592H4ADi7eX46MbgluCm4O3lqun//0ryMe1Q5///////////nuql6HzoLed86AjryvbX5Jvj79/P3hbeYd/i3KbcYttC2knbw9/z3a7dFdy32UnajdkV2jrasdtr2xbdK92W4ITjfN/t4XPiO+Ho3l3hFt5h317eYd2F257aONuU2djcFdx02/jZwdiw2UPZytbZ1u3W0NUG19TW6de311DZWNil2jraZNjN16LW49YA2GvYt9cc2kLaG9mw2XTbd93n3czb3tt33Zfbxd1022reh+A54kngWOMA4ufdg97Q3Srfktyb2drYA9wi3kvdb9+w3HPnpuBY4MLeEN+24e3hh+aj5Lznf/D///////9z52Hf4N8w2+3cJ9uW2vfcYd/9367dhOPg3xvgCt533ZLcRd/o3mfgGeFz4ifkXeG131jjwt4M3B/bfdjj1m/Xptdy2WTZUtjU2BTZL9lJ2rrb59sK3mHc99zQ3WzdLt5T3zre79+53abcYdzC3mrefNuu3djcldjk187YvdoV2lDZ29ne2yHd+OCj3a7dg97i3OfdRNxS3rrcl9uc3I3djtow2xzafNul2trYFNn1113Zhtrl2tXb5doc2u3YSdnF2rrctd/v343da9zc3UXfAuO8583yzuj46Ajr+OjY6V3v/////////////////////////////3/wB+j46K/uXuUP5JbgUOcx7f//WvPp8OnmO+Hb3vXeG+CY3zHcit8n5VTof/Aq7Lnv/////5D+////////////////////////////////////////////////h+ac3uDfm+M54Hzf/t3i2UHdRd+f23TbSdrD24nYgNkk2ijcedl32qnZ+dsO2RXcBts12ajbG9n62KXaA9zN2sXaztwr2jzZotiG2TDbLt6u3VbddNwD3OfgIt4n5AvnZ+CS3M/eUt7z3Xbejd3z3WLb/9kS2M3XQ9l82wPfxdoM4AzcnNyx47Hrd+tz4jjf0OW851jx////////////////r/f//yfkCOqX55viJ+VM4ofmyOZz4vfjw9+Q/v////9r6rnvI+ka8P///////////////////////////////////////////////////////////////8r22Ol/8P/////R+aXoWOOH4mfgjd3+2jzZlNkr2vXXwdgr2rXa8NuI3MzbltoG25/b59u63AzdTOHY6SPp//////////////////+85+3l+Oil6Hfrsev46HDkqulz55bgm+OW4EHdpdq+2ZvYRt6m4Mjmc+eq6S3or+4P5J7q//+r/Ozra+r//6/4///////////////////////////////////////////////////////////////////s6///0flw5CflcOQn5K/4////////////////////////Xe6H5i3oXe5o5pD0///////////p8C3naOZJ5jnikPT/////////////////////////////////////////////////////////////////////2Olr6njtB+g74W/fNt1F3/XeGeGx4yfkwu1a8////////3jt+OD46NLq/////////////////////+zrr+586T/ktd9M4mjmXuXK9l7lP+st5y3n/////////////8r2////////////////a+r/////////////+/X//+zr6fD///////////////9d7j71Me0f+/////9K8j/rzvH///////////////////////////////+Q9D71h+ZU6C3nm+M54gre5dri2Q7auttr2+fdFt6H4HfgP+Rf4j/rluV360/pB+gj6dH5////////////////////////////////fOh65U/piuQn5H/wgOFd4Yrf891020Dbutxr2xXaL9l+2unZ8NtB3ejeFdz13rbgQd1Y4NvexuBY4FDnJ+TG4K/io+Tt5VToaObS30nmOeof++zr////////Me3/////COv/////////////4efY6f//////////////////////////////////////////////////WPH//6/4q/xK8irsDu7///////////////////////////////////////////////9/8Mr2Kuxz57bgLej/////r+4/6///WPH//3PnXe4+9V3hX+Jd7v///////////////xrwH/tp7P//setr6v////////////////////8l4hPiSeZU6Pfj//////////936///0upC5SrfnN6620vd99yD3hfjr/gO7ufg5+Ce2oPYBtiJ2P/Zptfk1+fYMdyX2xXcrt1B3QHd6N6e2r7ZTtzF2vnbh+Aq4Zjdg96H4Azl6eZd7///////////////////////////////////////////////////P+t34APfo+TI5uDf7eWX583y////////////////f/D//13v/////6bQQVJTcGVjaWFsAAMBAAEAAAAAHgAAAB4AAAAeAAAAHgAAAAAAAADlhgEAECcAAAAAAAAAAAAAAAPcBQAA9AEAAOgDAADECQAAuAsAANAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOgDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfu4LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANxiFgCAOAEAAAAAAGVYdAAqAAAAAQAYAAIAIAAIAEwEAAAEEAAAsAQAAIgTAAAgAwAA0AcAAMSGAAAAABMARU9YAEFSRXZlbnQAAwAAAAECCgDzegAAuAsAALgLAAB7PAAAAgAAAgEAAAC0AAAABwsBAAEAAAAAAAAAGgAAACBOAAAcAAACAQAAAIQCAABfvQ4AAQAAAEUBAAD///9/AAD8CQAA////fwAA2gsAAP///38AAFdhdmVNVFNQYXJhbXMAIABBVkcAMC4wABIAAAAAAAAAAADBqMC6KUFKQZW/AAASAAAAVBYAAAAAAAAAAAcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVW5pdF9NAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABNTzE4MwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ2tzdW0AKqw=";
+(function () {
+  "use strict";
+  var S = STV;
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { traces: [], cur: -1, view: null, cursors: { a: null, b: null }, active: "a", selRow: null,
+    showPF: true, sections: true, onlyRepair: false, allowEst: false, profile: loadProfile(), limWl: "1310" };
+
+  // ---------- storage (device convenience only) ----------
+  function loadProfile() {
+    try { var t = localStorage.getItem("stv.profile.v1"); if (t) { var p = JSON.parse(t); var base = S.newProfile(p.name); base.checksEnabled = p.checksEnabled !== false; base.limits = p.limits || {}; return base; } } catch (e) {}
+    return S.newProfile();
+  }
+  function saveProfile() {
+    try { localStorage.setItem("stv.profile.v1", JSON.stringify({ name: state.profile.name, checksEnabled: state.profile.checksEnabled, limits: state.profile.limits })); return true; } catch (e) { return false; }
+  }
+
+  // ---------- helpers ----------
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function f3(v) { return v === null || v === undefined ? "—" : v.toFixed(3); }
+  function f2(v) { return v === null || v === undefined ? "—" : v.toFixed(2); }
+  function pal(st) { return { pass: "var(--pass)", warn: "var(--warn)", fail: "var(--fail)", no_data: "var(--nodata)" }[st]; }
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function cur() { return state.traces[state.cur] || null; }
+  function prof() { return state.showPF ? state.profile : null; }
+  function banner(text, info) { var d = document.createElement("div"); d.className = "banner" + (info ? " info" : ""); d.textContent = text; d.addEventListener("click", function () { d.remove(); }); $("banners").appendChild(d); }
+
+  // ---------- traces ----------
+  function addTrace(m, label) {
+    state.traces.push({ m: m, label: label || m.source, span: S.defaultSpanSettings() });
+    selectTrace(state.traces.length - 1);
+  }
+  function selectTrace(i) {
+    state.cur = i; state.selRow = null; state.view = null;
+    var t = cur(); state.cursors = { a: null, b: null };
+    if (t) { var x = t.m.distance; state.cursors.a = x[0]; state.cursors.b = x[x.length - 1]; }
+    loadSpanForm(); render();
+  }
+  function closeTrace(i) { state.traces.splice(i, 1); selectTrace(Math.min(state.cur, state.traces.length - 1)); }
+  function renderChips() {
+    var c = $("chips"); c.innerHTML = "";
+    if (!state.traces.length) { c.innerHTML = '<span class="muted">Нет открытых трасс</span>'; return; }
+    state.traces.forEach(function (t, i) {
+      var b = document.createElement("button"); b.className = "chip"; b.setAttribute("aria-pressed", i === state.cur ? "true" : "false");
+      var st = S.combine(buildRowsFor(t).concat([]).reduce(function (a, r) { return a.concat(r.checks); }, []).concat(S.traceChecks(t.m, prof())));
+      b.innerHTML = '<span class="dot" style="background:' + (state.showPF ? pal(st) : "var(--nodata)") + '"></span>' + esc(t.label) +
+        (t.m.wavelength ? ' · ' + t.m.wavelength + ' нм' : '') + ' <span class="x" aria-label="Закрыть">✕</span>';
+      b.addEventListener("click", function (ev) { if (ev.target.classList.contains("x")) closeTrace(i); else selectTrace(i); });
+      c.appendChild(b);
+    });
+  }
+  $("fileinput").addEventListener("change", function (ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    files.forEach(function (f) {
+      var rd = new FileReader();
+      rd.onload = function () {
+        try { addTrace(S.parseSor(new Uint8Array(rd.result), f.name), f.name.replace(/\.sor$/i, "")); }
+        catch (e) { banner("«" + f.name + "» не открыт: " + e.message + ". Нужен файл SOR версии 2 с одной трассой."); }
+      };
+      rd.onerror = function () { banner("«" + f.name + "» не удалось прочитать."); };
+      rd.readAsArrayBuffer(f);
+    });
+    ev.target.value = "";
+  });
+
+  // ---------- computations ----------
+  function ctxFor(t) { if (!t._ctx || t._ctxEst !== state.allowEst) { t._ctx = S.makeContext(t.m, state.allowEst); t._ctxEst = state.allowEst; } return t._ctx; }
+  function spanFor(t) { return S.computeSpan(t.m, t.span, ctxFor(t)); }
+  function buildRowsFor(t) { return S.buildRows(t.m, prof(), ctxFor(t), spanFor(t)); }
+
+  // ---------- plot ----------
+  var cv = $("plot"), g = cv.getContext("2d"), M = { l: 46, r: 10, t: 12, b: 26 };
+  function sizeCanvas() { var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1; cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); g.setTransform(d, 0, 0, d, 0, 0); return r; }
+  function niceStep(span, n) { var raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+  function drawPlot() {
+    var r = sizeCanvas(), W = r.width, H = r.height, t = cur();
+    g.clearRect(0, 0, W, H); g.fillStyle = cssVar("--panel"); g.fillRect(0, 0, W, H);
+    if (!t) { g.fillStyle = cssVar("--muted"); g.font = "14px " + cssVar("--font-body"); g.fillText("Откройте файл SOR", 16, H / 2); return; }
+    var x = t.m.distance, y = t.m.signal, n = x.length;
+    if (!state.view) state.view = [x[0], x[n - 1]];
+    var x0 = state.view[0], x1 = state.view[1], pw = W - M.l - M.r, ph = H - M.t - M.b;
+    var i0 = lb(x, x0), i1 = Math.min(n - 1, lb(x, x1) + 1), ymin = Infinity, ymax = -Infinity;
+    for (var i = Math.max(0, i0 - 1); i <= i1; i++) { if (y[i] < ymin) ymin = y[i]; if (y[i] > ymax) ymax = y[i]; }
+    if (!(ymax > ymin)) { ymax = ymin + 1; }
+    var pad = (ymax - ymin) * 0.08; ymin -= pad; ymax += pad;
+    function X(v) { return M.l + (v - x0) / (x1 - x0) * pw; } function Y(v) { return M.t + (ymax - v) / (ymax - ymin) * ph; }
+    state._map = { X: X, Y: Y, x0: x0, x1: x1, pw: pw };
+    var grid = cssVar("--line"), muted = cssVar("--muted");
+    g.font = "11px " + cssVar("--font-num"); g.lineWidth = 1;
+    var sx = niceStep(x1 - x0, Math.max(3, Math.floor(pw / 80))), km = (x1 - x0) > 3000;
+    for (var gx = Math.ceil(x0 / sx) * sx; gx <= x1; gx += sx) { var px = X(gx); g.strokeStyle = grid; g.beginPath(); g.moveTo(px, M.t); g.lineTo(px, M.t + ph); g.stroke(); g.fillStyle = muted; g.fillText(km ? (gx / 1000).toFixed(sx < 1000 ? 1 : 0) : gx.toFixed(0), Math.min(px - 10, W - 30), H - 8); }
+    var sy = niceStep(ymax - ymin, 5);
+    for (var gy = Math.ceil(ymin / sy) * sy; gy <= ymax; gy += sy) { var py = Y(gy); g.strokeStyle = grid; g.beginPath(); g.moveTo(M.l, py); g.lineTo(M.l + pw, py); g.stroke(); g.fillStyle = muted; g.fillText(gy.toFixed(sy < 1 ? 1 : 0), 4, py + 4); }
+    g.fillStyle = muted; g.fillText(km ? "км" : "м", 4, H - 8); g.fillText("дБ", 4, M.t + 8);
+    // span shading
+    var sp = spanFor(t);
+    if (sp.valid && (t.span.beginEnabled || t.span.endEnabled)) {
+      g.fillStyle = "rgba(217,48,37,0.07)"; g.fillRect(X(sp.begin), M.t, X(sp.end) - X(sp.begin), ph);
+      g.strokeStyle = cssVar("--fail"); g.setLineDash([5, 4]);
+      [sp.begin, sp.end].forEach(function (v) { g.beginPath(); g.moveTo(X(v), M.t); g.lineTo(X(v), M.t + ph); g.stroke(); });
+      g.setLineDash([]);
+    }
+    // trace (min/max per pixel column)
+    g.save(); g.beginPath(); g.rect(M.l, M.t, pw, ph); g.clip();
+    g.strokeStyle = cssVar("--trace"); g.lineWidth = 1.3; g.beginPath();
+    var col = -1, cmin = 0, cmax = 0, first = true;
+    for (i = Math.max(0, i0 - 1); i <= i1; i++) {
+      var c = Math.floor(X(x[i]));
+      if (c !== col) { if (col >= 0) { g.lineTo(col + 0.5, Y(cmin)); g.lineTo(col + 0.5, Y(cmax)); } col = c; cmin = cmax = y[i]; if (first) { g.moveTo(c + 0.5, Y(y[i])); first = false; } }
+      else { if (y[i] < cmin) cmin = y[i]; if (y[i] > cmax) cmax = y[i]; }
+    }
+    if (col >= 0) { g.lineTo(col + 0.5, Y(cmin)); g.lineTo(col + 0.5, Y(cmax)); }
+    g.stroke();
+    // event markers
+    var rows = buildRowsFor(t);
+    rows.forEach(function (row) {
+      if (row.kind !== "event" || row.from === null || row.from < x0 || row.from > x1) return;
+      var j = Math.min(n - 1, lb(x, row.from)), px = X(row.from), py = Y(y[j]);
+      g.fillStyle = state.showPF ? cssVar({ pass: "--pass", warn: "--warn", fail: "--fail", no_data: "--nodata" }[row.status]) : "#5f6b7a";
+      g.beginPath(); g.moveTo(px, py + 2); g.lineTo(px - 6, py + 12); g.lineTo(px + 6, py + 12); g.closePath(); g.fill();
+      g.fillStyle = cssVar("--ink"); g.font = "11px " + cssVar("--font-num"); g.fillText(row.num, px - 3, py + 24);
+    });
+    // cursors
+    [["a", "#d93025", "A"], ["b", "#2e9e48", "B"]].forEach(function (cfg) {
+      var v = state.cursors[cfg[0]]; if (v === null || v < x0 || v > x1) return;
+      g.strokeStyle = cfg[1]; g.lineWidth = state.active === cfg[0] ? 2 : 1.2; g.beginPath(); g.moveTo(X(v), M.t); g.lineTo(X(v), M.t + ph); g.stroke();
+      g.fillStyle = cfg[1]; g.font = "bold 12px " + cssVar("--font-body"); g.fillText(cfg[2], X(v) + 4, M.t + 12);
+    });
+    g.restore();
+    renderReadout();
+  }
+  function lb(arr, v) { var lo = 0, hi = arr.length - 1; while (lo < hi) { var mid = (lo + hi) >> 1; if (arr[mid] < v) lo = mid + 1; else hi = mid; } return lo; }
+  function levelAt(m, d) { var x = m.distance, j = lb(x, d); if (j > 0 && Math.abs(x[j - 1] - d) < Math.abs(x[j] - d)) j--; return { d: x[j], y: m.signal[j] }; }
+  function renderReadout() {
+    var t = cur(); if (!t) { $("readout").textContent = ""; return; }
+    var a = levelAt(t.m, state.cursors.a), b = levelAt(t.m, state.cursors.b);
+    $("readout").innerHTML = '<span style="color:#d93025">A</span> <b>' + a.d.toFixed(2) + ' м</b> ' + a.y.toFixed(3) + ' дБ · ' +
+      '<span style="color:#2e9e48">B</span> <b>' + b.d.toFixed(2) + ' м</b> ' + b.y.toFixed(3) + ' дБ · Δ <b>' + (b.d - a.d).toFixed(2) + ' м</b>, <b>' + (b.y - a.y).toFixed(3) + ' дБ</b>';
+  }
+  function setView(a, b) {
+    var t = cur(); if (!t) return; var x = t.m.distance, lo = x[0], hi = x[x.length - 1], minw = Math.max((hi - lo) / 20000, 2);
+    if (b - a < minw) { var c = (a + b) / 2; a = c - minw / 2; b = c + minw / 2; }
+    if (b - a > hi - lo) { a = lo; b = hi; }
+    if (a < lo) { b += lo - a; a = lo; } if (b > hi) { a -= b - hi; b = hi; }
+    state.view = [a, b]; drawPlot();
+  }
+  function zoom(f, center) { var v = state.view; if (!v) return; var c = center === undefined ? (v[0] + v[1]) / 2 : center; setView(c - (c - v[0]) * f, c + (v[1] - c) * f); }
+  $("zoomIn").onclick = function () { zoom(0.5); }; $("zoomOut").onclick = function () { zoom(2); }; $("zoomAll").onclick = function () { state.view = null; drawPlot(); };
+  function setActive(k) { state.active = k; $("curA").setAttribute("aria-pressed", k === "a"); $("curB").setAttribute("aria-pressed", k === "b"); drawPlot(); }
+  $("curA").onclick = function () { setActive("a"); }; $("curB").onclick = function () { setActive("b"); };
+  // touch & mouse
+  var ptrs = {}, gest = null, lastTap = 0;
+  function dataX(clientX) { var r = cv.getBoundingClientRect(), mp = state._map; return mp.x0 + (clientX - r.left - M.l) / mp.pw * (mp.x1 - mp.x0); }
+  cv.addEventListener("pointerdown", function (e) {
+    cv.setPointerCapture(e.pointerId); ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(ptrs);
+    if (ids.length === 1) gest = { type: "pan", sx: e.clientX, sy: e.clientY, view: state.view.slice(), moved: false, t: Date.now() };
+    else if (ids.length === 2) { var p = ids.map(function (k) { return ptrs[k].x; }); gest = { type: "pinch", d0: Math.abs(p[0] - p[1]) || 1, c: dataX((p[0] + p[1]) / 2), view: state.view.slice() }; }
+  });
+  cv.addEventListener("pointermove", function (e) {
+    if (!ptrs[e.pointerId] || !gest) return; ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var mp = state._map;
+    if (gest.type === "pan") {
+      var dx = e.clientX - gest.sx; if (Math.abs(dx) > 6 || Math.abs(e.clientY - gest.sy) > 6) gest.moved = true;
+      if (gest.moved) { var dd = dx / mp.pw * (gest.view[1] - gest.view[0]); setView(gest.view[0] - dd, gest.view[1] - dd); }
+    } else if (gest.type === "pinch") {
+      var ids = Object.keys(ptrs); if (ids.length < 2) return;
+      var d = Math.abs(ptrs[ids[0]].x - ptrs[ids[1]].x) || 1, f = gest.d0 / d, c = gest.c;
+      setView(c - (c - gest.view[0]) * f, c + (gest.view[1] - c) * f);
+    }
+  });
+  function endPtr(e) {
+    if (gest && gest.type === "pan" && !gest.moved && Date.now() - gest.t < 400) {
+      var now = Date.now();
+      if (now - lastTap < 300) { state.view = null; drawPlot(); lastTap = 0; }
+      else { lastTap = now; state.cursors[state.active] = levelAt(cur().m, dataX(e.clientX)).d; drawPlot(); }
+    }
+    delete ptrs[e.pointerId]; if (!Object.keys(ptrs).length) gest = null; else if (gest && gest.type === "pinch") gest = null;
+  }
+  cv.addEventListener("pointerup", endPtr); cv.addEventListener("pointercancel", endPtr);
+  cv.addEventListener("wheel", function (e) { if (!state.view) return; e.preventDefault(); zoom(e.deltaY > 0 ? 1.25 : 0.8, dataX(e.clientX)); }, { passive: false });
+  window.addEventListener("resize", drawPlot);
+
+  // ---------- tabs ----------
+  ["events", "span", "limits", "info"].forEach(function (k) {
+    $("tab-" + k).addEventListener("click", function () {
+      ["events", "span", "limits", "info"].forEach(function (j) { $("tab-" + j).setAttribute("aria-selected", j === k); $("view-" + j).hidden = j !== k; });
+    });
+  });
+
+  // ---------- events view ----------
+  function statusPill(st, text) { return '<span class="pill st-' + st + '"><span class="dot" style="background:' + pal(st) + '"></span>' + esc(text || S.STATUS_TEXT[st]) + '</span>'; }
+  function renderSummary(t, rows) {
+    var ctx = ctxFor(t), sp = spanFor(t), trace = S.traceChecks(t.m, prof());
+    var all = rows.reduce(function (a, r) { return a.concat(r.checks); }, []).concat(trace), st = S.combine(all);
+    var nRepair = rows.filter(function (r) { return r.repairStatus; }).length;
+    var chk = ctx.check, okc = ctx.trusted;
+    $("summary").className = "card stripe-" + (state.showPF ? st : "no_data");
+    $("summary").innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">' +
+      '<h2 style="margin:0">' + esc(t.label) + '</h2>' + (state.showPF ? statusPill(st, "Трасса: " + S.STATUS_TEXT[st]) : '<span class="muted">Pass/Fail выключен</span>') + '</div>' +
+      '<div class="summary">' +
+      kv("Total loss прибора", f3(t.m.totalLoss) + " дБ") + kv("Длина волокна", t.m.fiberLength ? (t.m.fiberLength).toFixed(2) + " м" : "—") +
+      kv("ORL", t.m.orl ? f3(t.m.orl) + " дБ" : "—") + kv("Итог Span", sp.total === null ? "не рассчитано" : (sp.totalEstimate ? "≈ " : "") + f3(sp.total) + " дБ") +
+      kv("Требует проверки", state.showPF ? String(nRepair) : "—") + kv("λ", t.m.wavelength ? t.m.wavelength + " нм" : "не опр.") + '</div>' +
+      '<div class="check ' + (okc ? "st-pass" : chk.diff === null ? "st-no_data" : "st-warn") + '" style="margin-top:10px">' +
+      (okc ? "Сверка с прибором: совпадает. " : "Сверка с прибором: ") + esc(chk.text) + '</div>';
+  }
+  function kv(k, v) { return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v num">' + esc(v) + '</span></div>'; }
+  function cellCls(c) { return state.showPF && c ? ' class="c-' + c.status + '"' : ""; }
+  function renderTable(t) {
+    var rows = buildRowsFor(t); t._rows = rows;
+    renderSummary(t, rows);
+    var shown = rows.filter(function (r) { return (state.sections || r.kind === "event") && (!state.onlyRepair || !state.showPF || r.repairStatus); });
+    var h = '<thead><tr><th>Событие</th><th>Расстояние м</th><th>Потери дБ</th><th>Отражение</th><th>Наклон дБ/км</th><th>Секция м</th><th>Потери уч. дБ</th><th>Накопл. дБ</th><th>Статус</th></tr></thead><tbody>';
+    shown.forEach(function (r) {
+      var i = rows.indexOf(r), sel = state.selRow === i ? " sel" : "";
+      if (r.kind === "event") {
+        h += '<tr class="event' + sel + '" data-i="' + i + '"><td>' + esc(r.num) + ' <span class="muted">' + esc(r.type) + '</span></td><td>' + f2(r.from) + '</td>' +
+          '<td' + cellCls(r.cells.loss) + '>' + f3(r.loss) + '</td><td' + cellCls(r.cells.reflectance) + '>' + (r.refl === null ? "—" : r.refl.toFixed(2)) + '</td>' +
+          '<td></td><td></td><td></td><td title="' + esc(r.cumNote) + '">' + (r.cum === null ? "—" : (r.cumEstimate ? "≈ " : "") + f3(r.cum)) + '</td>' +
+          '<td>' + (state.showPF ? (r.repairStatus ? '<span class="repair" style="color:' + pal(r.repairStatus) + '">' + esc(r.repairText) + '</span>' : esc(S.STATUS_TEXT[r.status])) : "—") + '</td></tr>';
+      } else {
+        h += '<tr class="section"><td>' + esc(r.num) + '</td><td></td><td></td><td></td><td' + cellCls(r.cells.slope) + '>' + (r.slope === null ? "—" : r.slope.toFixed(3)) + '</td>' +
+          '<td>' + f2(r.length) + '</td><td title="' + esc(r.secNote) + '">' + (r.secLoss === null ? "—" : (r.secEstimate ? "≈ " : "") + f3(r.secLoss)) + '</td>' +
+          '<td title="' + esc(r.cumNote) + '">' + (r.cum === null ? "—" : (r.cumEstimate ? "≈ " : "") + f3(r.cum)) + '</td><td></td></tr>';
+      }
+    });
+    if (!shown.length) h += '<tr><td colspan="9" style="text-align:left">Нет строк для показа.</td></tr>';
+    $("evtable").innerHTML = h + "</tbody>";
+    Array.prototype.forEach.call($("evtable").querySelectorAll("tr.event"), function (tr) {
+      tr.addEventListener("click", function () { selectRow(+tr.getAttribute("data-i")); });
+    });
+    renderDetail(t);
+  }
+  function selectRow(i) {
+    var t = cur(); state.selRow = state.selRow === i ? null : i;
+    var r = t._rows[i]; if (r && r.from !== null && state.selRow !== null) state.cursors.a = r.from;
+    renderTable(t); drawPlot();
+  }
+  function renderDetail(t) {
+    var d = $("detail"), r = state.selRow === null ? null : t._rows[state.selRow];
+    if (!r) { d.hidden = true; return; }
+    var h = '<h2>Событие ' + esc(r.num) + ' · ' + esc(r.type) + '</h2>';
+    if (state.showPF && r.repairStatus) h += '<div class="check st-' + r.repairStatus + '"><b>' + esc(r.repairText) + '</b><br>' + r.repairReasons.map(esc).join("<br>") + '<br><span class="muted">Отражающий пик сам по себе не доказывает повреждение; нужна проверка на месте.</span></div>';
+    h += r.checks.map(function (c) { return '<div class="check st-' + c.status + '">' + esc(S.describe(c)) + '</div>'; }).join("");
+    if (r.note) h += '<div class="muted">' + esc(r.note) + '</div>';
+    h += '<div class="muted">Накопленные потери: ' + esc(r.cumNote || "—") + '</div>';
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="mkBegin">Начало Span здесь</button><button class="btn small" id="mkEnd">Конец Span здесь</button></div><div class="err" id="mkErr"></div>';
+    d.innerHTML = h; d.hidden = false;
+    $("mkBegin").onclick = function () { spanFromRow(r, "begin"); }; $("mkEnd").onclick = function () { spanFromRow(r, "end"); };
+  }
+  function spanFromRow(r, which) {
+    var t = cur(), m = t.m, o = S.physicalOrder(m).valid;
+    if (which === "begin") { var k = o.indexOf(r.eventIndex); if (k < 0) { $("mkErr").textContent = "у события некорректная координата"; return; } t.span.beginEnabled = true; t.span.beginMode = "index"; t.span.beginIndex = k + 1; }
+    else { var ref = S.reverseReference(m), j = ref.indexOf(r.eventIndex); if (j < 0) { $("mkErr").textContent = "событие за концом волокна не может быть концом Span"; return; } t.span.endEnabled = true; t.span.endMode = "reverse_index"; t.span.endIndex = ref.length - j; }
+    loadSpanForm(); render();
+  }
+  $("optSections").onchange = function (e) { state.sections = e.target.checked; render(); };
+  $("optRepair").onchange = function (e) { state.onlyRepair = e.target.checked; render(); };
+
+  // ---------- span view ----------
+  function loadSpanForm() {
+    var t = cur(), s = t ? t.span : S.defaultSpanSettings();
+    $("spBeginOn").checked = s.beginEnabled; $("spBeginMode").value = s.beginMode; $("spBeginVal").value = s.beginMode === "index" ? s.beginIndex : s.beginLength;
+    $("spEndOn").checked = s.endEnabled; $("spEndMode").value = s.endMode; $("spEndVal").value = s.endMode === "reverse_index" ? s.endIndex : s.endLength;
+    $("spIncB").checked = s.includeBegin; $("spIncE").checked = s.includeEnd; $("spEst").checked = state.allowEst;
+  }
+  function num(v) { var x = parseFloat(String(v).replace(",", ".")); return isFinite(x) ? x : NaN; }
+  function readSpanForm() {
+    var t = cur(); if (!t) return; var s = t.span;
+    s.beginEnabled = $("spBeginOn").checked; s.beginMode = $("spBeginMode").value;
+    if (s.beginMode === "index") s.beginIndex = Math.round(num($("spBeginVal").value)); else s.beginLength = num($("spBeginVal").value);
+    s.endEnabled = $("spEndOn").checked; s.endMode = $("spEndMode").value;
+    if (s.endMode === "reverse_index") s.endIndex = Math.round(num($("spEndVal").value)); else s.endLength = num($("spEndVal").value);
+    s.includeBegin = $("spIncB").checked; s.includeEnd = $("spIncE").checked; state.allowEst = $("spEst").checked;
+    render();
+  }
+  ["spBeginOn", "spBeginMode", "spBeginVal", "spEndOn", "spEndMode", "spEndVal", "spIncB", "spIncE", "spEst"].forEach(function (id) { $(id).addEventListener("change", readSpanForm); });
+  $("spBeginMode").addEventListener("change", function () { $("spBeginVal").value = $("spBeginMode").value === "index" ? 1 : 0; readSpanForm(); });
+  $("spEndMode").addEventListener("change", function () { $("spEndVal").value = $("spEndMode").value === "reverse_index" ? 1 : 0; readSpanForm(); });
+  function renderSpan(t) {
+    var sp = spanFor(t), ctx = ctxFor(t), h = "";
+    if (sp.valid) {
+      h += '<div class="summary">' + kv("Длина Span", sp.length.toFixed(2) + " м") + kv("Итог Span", sp.total === null ? "не рассчитано" : (sp.totalEstimate ? "≈ " : "") + f3(sp.total) + " дБ") + kv("Граничные потери", sp.boundaryLoss === null ? "—" : f3(sp.boundaryLoss) + " дБ") + '</div>';
+      h += '<p class="muted">Начало: ' + sp.begin.toFixed(2) + ' м — ' + esc(sp.beginText) + '<br>Конец: ' + sp.end.toFixed(2) + ' м — ' + esc(sp.endText) + '<br>Граничные: ' + esc(sp.boundaryText) + '<br>Итог: ' + esc(sp.totalText) + '</p>';
+    } else h += '<p class="err">Span не определён: ' + esc(sp.errors.join("; ")) + '</p>';
+    h += '<div class="check ' + (ctx.trusted ? "st-pass" : ctx.check.diff === null ? "st-no_data" : "st-warn") + '">Сверка с прибором: ' + esc(ctx.check.text) + '</div>';
+    $("spanResult").innerHTML = h;
+  }
+
+  // ---------- limits view ----------
+  var LIM_ROWS = [["splice_loss", "Потеря сварки, дБ", "high"], ["connector_loss", "Потеря соединителя, дБ", "high"], ["reflectance", "Отражение, дБ", "high"],
+    ["slope", "Затухание, дБ/км", "high"], ["total_loss", "Потери линии, дБ", "high"], ["total_orl", "ORL линии, дБ (не меньше)", "low"]];
+  function renderLimits() {
+    var wls = ["1310", "1550"]; state.traces.forEach(function (t) { var k = S.wavelengthKey(t.m.wavelength); if (k && wls.indexOf(k) < 0) wls.push(k); });
+    $("wlchips").innerHTML = wls.map(function (w) { return '<button class="chip" data-w="' + w + '" aria-pressed="' + (w === state.limWl) + '">' + w + ' нм</button>'; }).join("");
+    Array.prototype.forEach.call($("wlchips").querySelectorAll("button"), function (b) { b.onclick = function () { state.limWl = b.getAttribute("data-w"); renderLimits(); }; });
+    var L = state.profile.limits[state.limWl] || {};
+    var h = '<tr><th>Метрика (' + state.limWl + ' нм)</th><th>Внимание</th><th>Нарушение</th></tr>';
+    LIM_ROWS.forEach(function (row) {
+      var v = L[row[0]] || {}, w = row[2] === "high" ? v.warn_high : v.warn_low, f = row[2] === "high" ? v.fail_high : v.fail_low;
+      h += '<tr><td>' + esc(row[1]) + '</td><td><input id="lw-' + row[0] + '" inputmode="decimal" value="' + (w === undefined || w === null ? "" : w) + '" aria-label="' + esc(row[1]) + ' внимание"></td>' +
+        '<td><input id="lf-' + row[0] + '" inputmode="decimal" value="' + (f === undefined || f === null ? "" : f) + '" aria-label="' + esc(row[1]) + ' нарушение"></td></tr>';
+    });
+    $("limtable").innerHTML = h;
+    $("optPF").checked = state.showPF; $("optChecks").checked = state.profile.checksEnabled;
+  }
+  function readLimits() {
+    var errs = [], out = {};
+    LIM_ROWS.forEach(function (row) {
+      function rd(id) { var s = $(id).value.trim(); if (s === "") return null; var x = num(s); if (!isFinite(x)) { errs.push(row[1] + ": «" + s + "» не число"); return null; } return x; }
+      var w = rd("lw-" + row[0]), f = rd("lf-" + row[0]), v = row[2] === "high" ? { warn_high: w, fail_high: f } : { warn_low: w, fail_low: f };
+      var e = S.validateLimits(row[0], row[2] === "high" ? "upper" : "lower", v); e.forEach(function (x) { errs.push(row[1] + ": " + x); });
+      out[row[0]] = v;
+    });
+    return { errs: errs, limits: out };
+  }
+  $("limSave").onclick = function () {
+    var r = readLimits(); $("limerr").textContent = r.errs.join(" · ");
+    if (r.errs.length) return;
+    if (state._demoLimits && state.limWl !== "1310") delete state.profile.limits["1310"];
+    state._demoLimits = false;
+    state.profile.limits[state.limWl] = r.limits;
+    var ok = saveProfile(); $("limsaved").textContent = ok ? "Пороги для " + state.limWl + " нм сохранены на этом устройстве." : "Пороги применены, но браузер не дал сохранить их до следующего запуска.";
+    invalidate(); render();
+  };
+  $("limDemo").onclick = function () {
+    var demo = { "1310": [-45, -35], "1550": [-50, -40] }[state.limWl] || [-45, -35];
+    state.profile.limits[state.limWl] = { splice_loss: { warn_high: 0.1, fail_high: 0.3 }, connector_loss: { warn_high: 0.5, fail_high: 0.75 },
+      reflectance: { warn_high: demo[0], fail_high: demo[1] }, slope: { warn_high: 0.35, fail_high: 0.5 }, total_loss: {}, total_orl: { warn_low: 30, fail_low: 27 } };
+    renderLimits(); $("limsaved").textContent = "Заполнено примером (не норматив). Проверьте и нажмите «Сохранить пороги».";
+  };
+  $("limClear").onclick = function () { delete state.profile.limits[state.limWl]; saveProfile(); renderLimits(); invalidate(); render(); $("limsaved").textContent = "Пороги " + state.limWl + " нм удалены."; };
+  $("optPF").onchange = function (e) { state.showPF = e.target.checked; render(); };
+  $("optChecks").onchange = function (e) { state.profile.checksEnabled = e.target.checked; saveProfile(); render(); };
+  function invalidate() { state.traces.forEach(function (t) { t._ctx = null; }); }
+
+  // ---------- info ----------
+  function renderInfo(t) {
+    if (!t) { $("params").innerHTML = ""; return; }
+    var p = [["Файл", t.m.source], ["Прибор (SupParams)", t.m.instrument || "—"]].concat(t.m.params).concat([["Блоки файла", t.m.blocks.join(", ")]]);
+    $("params").innerHTML = p.map(function (kv_) { return '<div>' + esc(kv_[0]) + '</div><div>' + esc(kv_[1]) + '</div>'; }).join("");
+  }
+
+  // ---------- render ----------
+  function render() {
+    var t = cur();
+    $("subtitle").textContent = t ? (t.m.instrument || "SOR") + " · " + t.m.events.length + " событий · файл не изменяется" : "Просмотр SOR без изменения файлов";
+    renderChips();
+    if (t) { renderTable(t); renderSpan(t); } else { $("summary").innerHTML = "Откройте файл SOR."; $("evtable").innerHTML = ""; $("spanResult").innerHTML = ""; $("detail").hidden = true; }
+    renderLimits(); renderInfo(t); drawPlot();
+  }
+
+  // ---------- start with the labelled example ----------
+  try {
+    var bin = atob(SAMPLE_B64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var hasLimits = Object.keys(state.profile.limits).length > 0;
+    if (!hasLimits) { state.profile.limits["1310"] = { splice_loss: { warn_high: 0.1, fail_high: 0.3 }, connector_loss: { warn_high: 0.3, fail_high: 0.5 }, reflectance: { warn_high: -40, fail_high: -30 } }; state._demoLimits = true; }
+    addTrace(S.parseSor(bytes, "example3-anritsu-accessmastermt9085.sor"), "Пример Anritsu");
+    banner("Открыт пример (открытый образец Anritsu MT9085) с демонстрационными порогами — не нормативы. Нажмите «Открыть SOR», чтобы выбрать свои файлы. Пороги — вкладка «Пороги».", true);
+  } catch (e) { banner("Пример не загрузился: " + e.message); render(); }
+})();
+</script>
+<script>
+/* Offline: cache the app on first visit (works only over https, e.g. GitHub Pages). */
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+</script>
+</body>
+</html>
